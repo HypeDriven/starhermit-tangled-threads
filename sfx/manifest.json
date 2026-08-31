@@ -1,0 +1,16 @@
+[
+  { "name": "strand-select", "seconds": 1, "prompt": "A single soft nylon thread being plucked, short bright twang with a gentle decay.", "event": "select" },
+  { "name": "strand-select-soft", "seconds": 1, "prompt": "A quiet fingertip tap on a taut silk string, muted high pluck.", "event": "select" },
+  { "name": "strand-release", "seconds": 1, "prompt": "A taut thread softly released, low dull pluck fading quickly.", "event": "deselect" },
+  { "name": "thread-extend", "seconds": 1, "prompt": "A strand of yarn sliding over a wooden table edge, short soft rasp.", "event": "extend" },
+  { "name": "thread-extend-rasp", "seconds": 1, "prompt": "A sewing thread drawn quickly across woven fabric, brief textured scrape.", "event": "extend" },
+  { "name": "thread-retract", "seconds": 1, "prompt": "A loose thread pulled back through a needle's eye, short soft zip.", "event": "retract" },
+  { "name": "thread-retract-soft", "seconds": 1, "prompt": "Yarn gently sliding backward off a wooden spool, quiet hushed swish.", "event": "retract" },
+  { "name": "invalid-move-knock", "seconds": 1, "prompt": "A short dull wooden knock with a low muted thud, like tapping a blocked door.", "event": "invalid" },
+  { "name": "spool-reel", "seconds": 2, "prompt": "A small wooden fishing reel cranked quickly, clicking ratchet winding in thread.", "event": "reel" },
+  { "name": "spool-reel-quick", "seconds": 1, "prompt": "A quick ratchet click of a hand reel taking up slack line.", "event": "reel" },
+  { "name": "round-complete-chime", "seconds": 3, "prompt": "A gentle ascending sequence of small brass bell chimes with a soft shimmer tail.", "event": "complete" },
+  { "name": "round-fail-thud", "seconds": 2, "prompt": "A soft descending wooden mallet tone ending in a quiet padded thud.", "event": "fail" },
+  { "name": "ui-click", "seconds": 1, "prompt": "A crisp short UI button click, like a small plastic switch snap.", "event": "uiClick" },
+  { "name": "ui-click-soft", "seconds": 1, "prompt": "A soft muted tap on a small wooden toggle button, gentle click.", "event": "uiClick" }
+]

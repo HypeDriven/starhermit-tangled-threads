@@ -1,0 +1,3 @@
+name=Tangled Threads
+launch=index.html
+server=server.js

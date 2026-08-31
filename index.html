@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="Tangled Threads — route colored strands without crossings and reel them into their spools." />
+<title>Tangled Threads</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #2b2320; --panel: rgba(20,14,10,.82); --panel-border: #6b5540;
+    --text: #f5efe6; --accent: #e8b54a; --accent-text: #241d18;
+    --pill: #3a2f28; --focus: #ffffff;
+    --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+    font-size: 16px;
+  }
+  body.text-large { font-size: 20px; }
+  body.high-contrast { --bg:#000; --panel:#000; --text:#fff; --accent:#ffd700; --pill:#111; --panel-border:#fff; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #game-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+
+  [hidden] { display: none !important; }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 1rem; padding: calc(1rem + var(--safe-t)) calc(1rem + var(--safe-r))
+    calc(1rem + var(--safe-b)) calc(1rem + var(--safe-l)); text-align: center; z-index: 20;
+    overflow-y: auto; background: rgba(20,14,10,.45); }
+  .screen.transparent { background: transparent; pointer-events: none; }
+  .screen.transparent > * { pointer-events: auto; }
+
+  h1.title { font-size: clamp(2rem, 7vw, 4rem); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  h2 { font-size: clamp(1.25rem, 3vw, 1.75rem); color: #ffe9c0; margin-bottom: .75rem; }
+  .tagline { font-size: clamp(.95rem, 2.4vw, 1.2rem); opacity: .9; max-width: 60ch; line-height: 1.5; }
+
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 1rem;
+    padding: 1.25rem 1.5rem; max-width: min(94vw, 46rem); width: 100%; text-align: left; }
+  .panel.center { text-align: center; }
+
+  .btnrow { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: center; }
+  .ui-btn { font-size: 1.05rem; min-height: 44px; min-width: 44px; padding: .65rem 1.5rem; border-radius: 999px;
+    border: none; background: var(--accent); color: var(--accent-text); font-weight: 700; }
+  .ui-btn.secondary { background: #6f6a63; color: #fff; }
+  .ui-btn.ghost { background: transparent; border: 2px solid var(--accent); color: #ffe9c0; }
+  .ui-btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .ui-btn.small { font-size: .9rem; padding: .4rem 1rem; min-height: 44px; }
+
+  .mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; width: 100%; }
+  .mode-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: .9rem;
+    padding: 1rem; text-align: left; color: var(--text); display: flex; flex-direction: column; gap: .35rem; }
+  .mode-card strong { color: #ffe9c0; font-size: 1.1rem; }
+  .mode-card small { opacity: .85; line-height: 1.4; }
+  .mode-card:hover, .mode-card:focus-visible { border-color: var(--accent); }
+
+  /* HUD */
+  #hud { position: fixed; top: var(--safe-t); left: var(--safe-l); right: var(--safe-r); z-index: 10;
+    display: flex; justify-content: center; gap: .5rem; padding: .5rem; pointer-events: none; flex-wrap: wrap; }
+  #hud .pill, #hint-bar .pill { background: var(--pill); color: #ffe9c0; padding: .45rem 1rem; border-radius: 999px;
+    font-weight: 700; font-size: clamp(.85rem, 2.2vw, 1.05rem); pointer-events: auto; border: 1px solid var(--panel-border); }
+  #hint-bar { position: fixed; bottom: calc(var(--safe-b) + .5rem); left: var(--safe-l); right: var(--safe-r);
+    display: flex; justify-content: center; z-index: 10; pointer-events: none; padding: 0 .5rem; }
+  #hint-bar .pill { max-width: 70ch; text-align: center; line-height: 1.4; }
+
+  /* Action tray (thumb zone) */
+  #action-tray { position: fixed; bottom: calc(var(--safe-b) + 3.6rem); left: 0; right: 0; z-index: 11;
+    display: flex; justify-content: center; gap: .5rem; pointer-events: none; }
+  #action-tray .ui-btn { pointer-events: auto; }
+  body.left-handed #action-tray { flex-direction: row-reverse; }
+
+  /* Settings */
+  .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .5rem 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .setting-row label { flex: 1; text-align: left; }
+  .setting-row input[type="range"] { width: 9rem; min-height: 44px; }
+  .setting-row select, .setting-row input[type="checkbox"] { min-height: 44px; min-width: 44px; font: inherit;
+    background: var(--pill); color: var(--text); border: 1px solid var(--panel-border); border-radius: .4rem; padding: .2rem .5rem; }
+
+  .score-rows { width: 100%; border-collapse: collapse; margin: .5rem 0; }
+  .score-rows td { padding: .35rem .5rem; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .score-rows td:last-child { text-align: right; font-weight: 700; }
+  .score-total td { font-size: 1.2rem; color: var(--accent); }
+
+  .rule-card { background: rgba(255,255,255,.06); border-radius: .7rem; padding: .8rem 1rem; margin: .5rem 0;
+    text-align: left; line-height: 1.5; }
+  .rule-card strong { color: #ffe9c0; }
+
+  kbd { background: #555; border-radius: .3rem; padding: .05rem .4rem; font-size: .85em; }
+
+  #sr-announcer { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* DOM accessibility mirror / no-WebGL fallback board */
+  #dom-board { display: grid; gap: 4px; margin: 1rem auto; }
+  #dom-board button { width: 44px; height: 44px; border-radius: .4rem; border: 2px solid var(--panel-border);
+    background: var(--pill); color: #fff; font-weight: 700; font-size: .8rem; }
+  #compat-msg { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); padding: 2rem; text-align: center; }
+
+  @media (min-width: 1024px) {
+    .screen { padding-left: 3rem; padding-right: 3rem; }
+    .panel { max-width: 46rem; }
+    p, .rule-card, .setting-row label { max-width: 70ch; }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    h1.title { font-size: 1.8rem; }
+    #action-tray { bottom: calc(var(--safe-b) + .5rem); right: calc(var(--safe-r) + .5rem); left: auto; flex-direction: column; }
+    #hint-bar { bottom: auto; top: calc(var(--safe-t) + 3rem); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game-canvas" aria-label="Tangled Threads playfield" role="img"></canvas>
+
+<!-- HUD -->
+<header id="hud" hidden>
+  <span class="pill" id="hud-objective" role="status">Objective</span>
+  <span class="pill" id="hud-progress">0/0</span>
+  <span class="pill" id="hud-moves">Moves 0</span>
+  <span class="pill" id="hud-timer">0:00</span>
+</header>
+<div id="hint-bar" hidden><span class="pill" id="hint-text" role="status"></span></div>
+<nav id="action-tray" hidden aria-label="Round actions">
+  <button type="button" class="ui-btn ghost small" id="btn-reel">Reel (R)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-undo">Undo (U)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-hint">Hint (H)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-pause">Pause (Esc)</button>
+</nav>
+
+<!-- Title -->
+<div class="screen" id="scr-title" role="main" aria-labelledby="title-h">
+  <h1 class="title" id="title-h">Tangled Threads</h1>
+  <p class="tagline">Select and route colored strands without crossings, then reel each strand into its matching spool.</p>
+  <div class="btnrow">
+    <button type="button" id="btn-play" class="ui-btn">Play</button>
+    <button type="button" id="btn-title-help" class="ui-btn ghost">Help</button>
+    <button type="button" id="btn-title-settings" class="ui-btn ghost">Settings</button>
+  </div>
+  <p id="title-progress" class="tagline" aria-live="polite"></p>
+</div>
+
+<!-- Mode select -->
+<div class="screen" id="scr-modes" hidden role="dialog" aria-labelledby="modes-h">
+  <h2 id="modes-h">Choose a mode</h2>
+  <div class="mode-grid">
+    <button type="button" class="mode-card" data-mode="learn"><strong>Learn</strong><small>Interactive lesson — one rule at a time. About 2 minutes. Not ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="journey"><strong>Journey</strong><small>40 authored stages with growing mechanics and mastery tests. Ranked locally.</small></button>
+    <button type="button" class="mode-card" data-mode="daily"><strong>Daily</strong><small>One shared seed per UTC day. Compare scores globally. Ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="practice"><strong>Practice</strong><small>Pick a difficulty, restart freely, undo allowed. Never ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="challenge"><strong>Challenge</strong><small>Tight move limits and tricky layouts. Ranked locally.</small></button>
+  </div>
+  <div id="mode-detail" class="panel" hidden>
+    <h2 id="mode-detail-name"></h2>
+    <p id="mode-detail-info" class="tagline"></p>
+    <div class="btnrow" style="margin-top:1rem">
+      <button type="button" id="btn-mode-start" class="ui-btn">Start</button>
+      <button type="button" id="btn-mode-back" class="ui-btn secondary">Back</button>
+    </div>
+    <div id="journey-list" class="mode-grid" style="margin-top:1rem" hidden></div>
+  </div>
+</div>
+
+<!-- Pause / settings -->
+<div class="screen" id="scr-pause" hidden role="dialog" aria-labelledby="pause-h" aria-modal="true">
+  <div class="panel">
+    <h2 id="pause-h">Paused</h2>
+    <div class="btnrow" style="margin-bottom:1rem">
+      <button type="button" id="btn-resume" class="ui-btn">Resume</button>
+      <button type="button" id="btn-restart" class="ui-btn secondary">Restart</button>
+      <button type="button" id="btn-leave" class="ui-btn ghost">Leave round</button>
+    </div>
+    <section aria-label="Settings" id="settings-block">
+      <div class="setting-row"><label for="vol-music">Music volume</label><input type="range" id="vol-music" min="0" max="100" value="50"></div>
+      <div class="setting-row"><label for="vol-effects">Effects volume</label><input type="range" id="vol-effects" min="0" max="100" value="80"></div>
+      <div class="setting-row"><label for="vol-ambience">Ambience volume</label><input type="range" id="vol-ambience" min="0" max="100" value="40"></div>
+      <div class="setting-row"><label for="vol-voice">Voice/cue volume</label><input type="range" id="vol-voice" min="0" max="100" value="80"></div>
+      <div class="setting-row"><label for="sel-quality">Graphics quality</label>
+        <select id="sel-quality"><option value="0">Low</option><option value="1">Medium</option><option value="2" selected>High</option></select></div>
+      <div class="setting-row"><label for="chk-motion">Reduced motion</label><input type="checkbox" id="chk-motion"></div>
+      <div class="setting-row"><label for="chk-contrast">High contrast</label><input type="checkbox" id="chk-contrast"></div>
+      <div class="setting-row"><label for="chk-cvd">Color-vision-safe palette</label><input type="checkbox" id="chk-cvd"></div>
+      <div class="setting-row"><label for="chk-text">Larger text</label><input type="checkbox" id="chk-text"></div>
+      <div class="setting-row"><label for="chk-left">Left-handed controls</label><input type="checkbox" id="chk-left"></div>
+      <div class="setting-row"><label for="chk-haptics">Haptics (vibration)</label><input type="checkbox" id="chk-haptics" checked></div>
+      <div class="setting-row"><label for="btn-replay-tut">Tutorial</label><button type="button" id="btn-replay-tut" class="ui-btn small secondary">Replay tutorial</button></div>
+    </section>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="screen" id="scr-results" hidden role="dialog" aria-labelledby="results-h" aria-modal="true">
+  <div class="panel center">
+    <h2 id="results-h">Round complete</h2>
+    <p id="results-sub" class="tagline"></p>
+    <table class="score-rows" aria-label="Score breakdown">
+      <tr><td>Completion</td><td id="sc-completion">0</td></tr>
+      <tr><td>Efficiency (moves vs par)</td><td id="sc-efficiency">0</td></tr>
+      <tr><td>Independence (hints)</td><td id="sc-independence">0</td></tr>
+      <tr><td>Discipline (invalid actions)</td><td id="sc-discipline">0</td></tr>
+      <tr class="score-total"><td>Total</td><td id="sc-total">0</td></tr>
+    </table>
+    <p id="results-compare" class="tagline" aria-live="polite"></p>
+    <p id="results-achievements" class="tagline" aria-live="polite"></p>
+    <div class="btnrow" style="margin-top:1rem">
+      <button type="button" id="btn-next" class="ui-btn">Next</button>
+      <button type="button" id="btn-retry" class="ui-btn secondary">Retry</button>
+      <button type="button" id="btn-results-home" class="ui-btn ghost">Home</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help -->
+<div class="screen" id="scr-help" hidden role="dialog" aria-labelledby="help-h">
+  <div class="panel">
+    <h2 id="help-h">How to play</h2>
+    <div class="rule-card"><strong>Goal.</strong> Route every colored strand across the board so its tip reaches the spool of the same color and shape, then reel it in.</div>
+    <div class="rule-card"><strong>No crossings.</strong> Strands may never share or cross a cell. Occupied cells are blocked for every other strand.</div>
+    <div class="rule-card"><strong>Routing.</strong> Tap a strand to select it, then tap or drag through empty neighboring cells to extend it. Tap the cell behind the tip (or press <kbd>U</kbd>) to pull back.</div>
+    <div class="rule-card"><strong>Reeling.</strong> When the tip rests on its matching spool, tap the spool or press <kbd>R</kbd> to reel the strand in. Reel all strands to finish the board.</div>
+    <div class="rule-card"><strong>Scoring.</strong> Completion (up to 1000) + efficiency vs par (up to 500) + hint independence (up to 200) + discipline (up to 100). Fewer moves and zero hints score higher.</div>
+    <div class="rule-card"><strong>Keyboard.</strong> <kbd>Tab</kbd>/<kbd>←→↑↓</kbd> move among cells · <kbd>Enter</kbd>/<kbd>Space</kbd> select or extend · <kbd>R</kbd> reel · <kbd>U</kbd> undo · <kbd>H</kbd> hint · <kbd>Esc</kbd> pause · <kbd>C</kbd> reset camera.</div>
+    <div class="btnrow" style="margin-top:1rem"><button type="button" id="btn-help-close" class="ui-btn">Close</button></div>
+  </div>
+</div>
+
+<!-- DOM accessibility mirror of the board -->
+<div class="screen transparent" id="scr-board-mirror" hidden aria-label="Board mirror">
+  <div id="dom-board" role="group" aria-label="Board cells"></div>
+</div>
+
+<div id="compat-msg" hidden>
+  <div>
+    <h2>3D unavailable</h2>
+    <p class="tagline">Your browser could not create a WebGL context. The simplified board below remains fully playable; your progress is preserved.</p>
+    <div id="compat-board-slot"></div>
+  </div>
+</div>
+
+<div id="sr-announcer" aria-live="polite"></div>
+<div id="sr-errors" aria-live="assertive"></div>
+
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

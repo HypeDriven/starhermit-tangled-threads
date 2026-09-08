@@ -74,6 +74,19 @@ async function main() {
   await sleep(800);
   await check('HUD visible after start', `!document.getElementById('hud').hidden`);
 
+  // The frame loop must be running AND the camera must see the gameplay layers:
+  // one draw call per board cell, spool part and strand bead. A stalled loop
+  // reports 0 and an environment-only camera reports a handful.
+  const stats = await evaljs(`(async () => (await import('./src/render.js')).getDrawStats())()`);
+  console.log('ok: draw stats', JSON.stringify(stats));
+  if (!stats || stats.calls < 20) throw new Error('3D board not drawn: ' + JSON.stringify(stats));
+
+  // The DOM mirror must paint real palette colours, not the raw palette index.
+  await check('mirror cells use strand palette colours', `(() => {
+    const bg = [...document.querySelectorAll('#dom-board button')].map((b) => b.style.background).filter(Boolean);
+    return bg.length > 0 && bg.every((c) => c !== 'rgb(0, 0, 0)');
+  })()`);
+
   // Complete the board programmatically through the real UI path (DOM mirror clicks).
   const done = await evaljs(`(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

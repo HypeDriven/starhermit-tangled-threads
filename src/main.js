@@ -45,6 +45,11 @@ function applySettings() {
   $('chk-text').checked = settings.largeText;
   $('chk-left').checked = settings.leftHanded;
   $('chk-haptics').checked = settings.haptics;
+  // Palette/quality changes rebuild the scene, so the live board must be re-synced.
+  if (session) {
+    render.syncState(session.state, selection);
+    ui.renderDomBoard($('dom-board'), session.state, mirrorOpts(), onMirrorCell);
+  }
   ui.saveSettings(settings);
 }
 
@@ -142,7 +147,7 @@ function startLevel(levelId) {
   ui.showOnly('scr-board-mirror');
   $('hud').hidden = false; $('action-tray').hidden = false;
   $('hint-bar').hidden = levelId !== 'tutorial';
-  ui.renderDomBoard($('dom-board'), session.state, null, onMirrorCell);
+  ui.renderDomBoard($('dom-board'), session.state, mirrorOpts(), onMirrorCell);
   updateHud();
   updateTutorialText();
   ui.announce(`${level.name}. Route each strand to its matching spool without crossings.`);
@@ -273,10 +278,17 @@ function tutorialCheck(eventType, strand) {
 
 /* ================= gameplay actions ================= */
 
+function mirrorOpts() {
+  return { selection, cursor: cursorCell, cvd: settings.cvdPalette };
+}
+
 function syncAll() {
   render.syncState(session.state, selection);
-  ui.renderDomBoard($('dom-board'), session.state, null, onMirrorCell);
+  ui.renderDomBoard($('dom-board'), session.state, mirrorOpts(), onMirrorCell);
   updateHud();
+  // A completed action clears the last error/hint; the tutorial keeps its lesson.
+  if (session.level.id === 'tutorial') updateTutorialText();
+  else $('hint-bar').hidden = true;
   ui.saveSnapshot(session.snapshot());
 }
 
@@ -357,11 +369,11 @@ function doHint() {
     msg = `Hint: extend the ${name} strand to row ${r}, column ${c}.`;
   } else if (a.type === 'retract') msg = `Hint: pull the ${name} strand back one cell.`;
   else msg = `Hint: reel in the ${name} strand.`;
+  syncAll();
   $('hint-bar').hidden = false;
   $('hint-text').textContent = msg;
   ui.announce(msg);
   audio.sfx.select();
-  syncAll();
 }
 
 function selectStrand(i) {
@@ -384,7 +396,9 @@ function onPointerDown(e) {
   const canvas = $('game-canvas');
   try { canvas.setPointerCapture(e.pointerId); } catch {}
   if (hit && hit.kind === 'strand') {
+    // Tapping an already-selected strand's body behind the tip pulls it back.
     if (selection !== hit.strand) selectStrand(hit.strand);
+    else if (hit.cell !== undefined) handleCell(hit.cell);
   } else if (hit && hit.kind === 'spool') {
     handleSpool(hit.strand);
     dragState = null;
@@ -428,13 +442,17 @@ function onPointerUp(e) {
 
 function handleCell(cell) {
   if (!session || session.phase !== 'active') return;
+  const occ = session.state.strands.findIndex((s) => !s.done && s.path.includes(cell));
   if (selection >= 0) {
     const st = session.state.strands[selection];
     if (st.path[st.path.length - 2] === cell) { tryRetract(selection); return; }
-    if (tryExtend(selection, cell)) return;
-    // If tap was on a different strand's body, switch selection.
+    // Reaching for another strand switches selection; it is not a rules foul,
+    // so it must not cost discipline points.
+    if (occ >= 0 && occ !== selection) { selectStrand(occ); return; }
+    if (occ === selection) { ui.announce('Tap the cell just behind the tip to pull back.'); return; }
+    tryExtend(selection, cell);
+    return;
   }
-  const occ = session.state.strands.findIndex((s) => !s.done && s.path.includes(cell));
   if (occ >= 0) selectStrand(occ);
 }
 
@@ -469,6 +487,7 @@ function moveCursor(dc, dr) {
   c = (c + dc + cols) % cols;
   r = (r + dr + rows) % rows;
   cursorCell = r * cols + c;
+  ui.setDomCursor($('dom-board'), cursorCell);
   const occ = session.state.strands.findIndex((s) => !s.done && s.path.includes(cursorCell));
   const spool = session.state.strands.findIndex((s) => !s.done && s.spool === cursorCell);
   ui.announce(`Row ${r + 1} column ${c + 1}` + (occ >= 0 ? `, strand ${occ + 1}` : '') + (spool >= 0 ? `, spool ${spool + 1}` : ''));
@@ -477,8 +496,8 @@ function moveCursor(dc, dr) {
 function onKeyDown(e) {
   if (e.key === 'Escape') {
     if (!$('scr-help').hidden) { $('btn-help-close').click(); return; }
+    if (!$('scr-pause').hidden) { $('btn-resume').click(); return; }
     if (session && session.phase === 'active') pauseGame('esc');
-    else if (session && session.phase === 'paused') resumeGame();
     return;
   }
   if (!session || session.phase !== 'active') return;
@@ -488,7 +507,7 @@ function onKeyDown(e) {
     case 'ArrowUp': e.preventDefault(); moveCursor(0, -1); break;
     case 'ArrowDown': e.preventDefault(); moveCursor(0, 1); break;
     case 'Enter': case ' ': e.preventDefault(); onMirrorCell(cursorCell); break;
-    case 'r': case 'R': if (selection >= 0) tryReel(selection); break;
+    case 'r': case 'R': if (selection >= 0) tryReel(selection); else explain('not-at-spool'); break;
     case 'u': case 'U': doUndo(); break;
     case 'h': case 'H': doHint(); break;
     case 'c': case 'C': render.resize(); ui.announce('Camera reset.'); break;
@@ -508,14 +527,26 @@ function onVisibility() {
   }
 }
 
+/** Keeps the HUD clear of the (wrap-dependent) compatibility banner. */
+function measureCompatBanner() {
+  document.documentElement.style.setProperty('--compat-h', $('compat-msg').offsetHeight + 'px');
+}
+
 function boot() {
   const canvas = $('game-canvas');
   const r = render.initRender(canvas);
   webglOk = r.ok;
+  document.body.classList.toggle('webgl-3d', r.ok);
   if (!r.ok) {
+    // Notice only: the DOM mirror stays in place and becomes the playfield.
+    document.body.classList.add('no-webgl');
     $('compat-msg').hidden = false;
-    $('compat-board-slot').appendChild($('dom-board'));
+    measureCompatBanner();
+    window.addEventListener('resize', measureCompatBanner);
     ui.announceError('WebGL unavailable. Simplified board active.');
+  } else {
+    $('mirror-caption').hidden = false;
+    render.startLoop();
   }
   applySettings();
   bindSettings();
@@ -530,7 +561,11 @@ function boot() {
     else if (pendingMode === 'daily') startLevel(dailySeedString(ui.serverNow()));
   });
   $('btn-mode-back').addEventListener('click', showModes);
-  $('btn-help-close').addEventListener('click', () => { session && session.phase === 'active' ? ui.showOnly('scr-board-mirror') : showTitle(); });
+  $('btn-help-close').addEventListener('click', () => {
+    if (session && session.phase === 'active') ui.showOnly('scr-board-mirror');
+    else if (session && session.phase === 'paused') ui.showOnly('scr-pause', 'scr-board-mirror');
+    else showTitle();
+  });
   $('btn-pause').addEventListener('click', () => pauseGame('button'));
   $('btn-resume').addEventListener('click', () => {
     $('btn-leave').hidden = false; $('btn-restart').hidden = false; $('btn-resume').textContent = 'Resume';
@@ -575,8 +610,10 @@ function boot() {
       session.setPhase('active', 'reconnect');
       ui.showOnly('scr-board-mirror');
       $('hud').hidden = false; $('action-tray').hidden = false;
-      ui.renderDomBoard($('dom-board'), session.state, null, onMirrorCell);
+      cursorCell = session.state.strands[0]?.anchor ?? 0;
+      ui.renderDomBoard($('dom-board'), session.state, mirrorOpts(), onMirrorCell);
       updateHud();
+      clearInterval(timerInterval);
       timerInterval = setInterval(updateHud, 1000);
       ui.announce('Welcome back — your round was restored from the last safe snapshot.');
       showTitleAfterRestoreNote();

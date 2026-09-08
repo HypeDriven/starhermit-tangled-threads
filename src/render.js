@@ -26,6 +26,7 @@ let animT = 0, lastTime = 0, rafId = 0, hidden = false;
 let onFrameCb = null;
 let shakeAmp = 0;
 let fxPool = [];
+let tubeCache = [];        // per-strand tube mesh, rebuilt on each state sync
 
 export function cellToWorld(level, cell) {
   const r = Math.floor(cell / level.cols), c = cell % level.cols;
@@ -51,14 +52,17 @@ export function initRender(canvasEl) {
   renderer.toneMappingExposure = 1.05;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(FRAMING.fov, 1, 0.1, 100);
+  // Layers are an authoring/picking concern: the camera draws all of them and
+  // every light lits all of them; only the raycaster narrows to LAYER_GAME.
+  camera.layers.enableAll();
 
   const key = new THREE.DirectionalLight(0xfff2e0, 2.4);
   key.position.set(3, 7, 4);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
-  scene.add(key);
-  scene.add(new THREE.HemisphereLight(0xcfd8e6, 0x3a2c22, 0.85));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+  const hemi = new THREE.HemisphereLight(0xcfd8e6, 0x3a2c22, 0.85);
+  const amb = new THREE.AmbientLight(0xffffff, 0.25);
+  for (const l of [key, hemi, amb]) { l.layers.enableAll(); scene.add(l); }
 
   // Selection ring + ghost preview live on the selection layer.
   selRing = new THREE.Mesh(
@@ -94,7 +98,7 @@ function applyQuality() {
   const dprCap = [1, 1.5, 2][quality];
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprCap));
   renderer.shadowMap.enabled = quality > 0;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   scene?.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
 }
 
@@ -126,11 +130,13 @@ function disposeWorld() {
   world = null;
   boardCells = []; spoolMeshes = []; strandGroups = [];
   fxPool = [];
+  tubeCache = [];   // tubes lived inside `world`; they are gone with it
 }
 
 export function buildLevel(level) {
   levelRef = level;
   theme = THEMES[level.theme % THEMES.length];
+  if (!renderer || !scene) return;   // no WebGL: the DOM mirror is the playfield
   disposeWorld();
   world = new THREE.Group();
   scene.background = new THREE.Color(theme.bg);
@@ -237,7 +243,6 @@ export function buildLevel(level) {
 
 /* ---------------- state -> view sync ---------------- */
 
-let tubeCache = [];
 
 export function syncState(state, selection = -1) {
   if (!world || !levelRef) return;
@@ -295,6 +300,7 @@ export function syncState(state, selection = -1) {
 }
 
 export function showGhost(worldPos, colorIdx, visible) {
+  if (!ghost) return;
   ghost.visible = visible;
   if (visible) {
     ghost.position.copy(worldPos);
@@ -306,7 +312,7 @@ export function showGhost(worldPos, colorIdx, visible) {
 export function shake(amount) { if (!reducedMotion) shakeAmp = Math.min(0.15, amount); }
 
 export function burstAt(worldPos, colorIdx) {
-  if (reducedMotion || quality === 0) return;
+  if (!world || reducedMotion || quality === 0) return;
   const n = quality === 1 ? 8 : 16;
   for (let i = 0; i < n; i++) {
     const p = new THREE.Mesh(
@@ -344,10 +350,20 @@ export function pick(clientX, clientY) {
   if (!hits.length) return null;
   const u = hits[0].object.userData;
   if (u.spool) return { kind: 'spool', strand: u.strand, cell: levelRef.strands[u.strand].spool };
-  if (u.anchor || u.tip) return { kind: 'strand', strand: u.strand };
-  if (u.strand !== undefined) return { kind: 'strand', strand: u.strand };
+  // Strand beads/tubes span cells: report which cell was touched so callers can
+  // tell "pull back one cell" from "that is my own body".
+  if (u.strand !== undefined) return { kind: 'strand', strand: u.strand, cell: worldToCell(hits[0].point) };
   if (u.cell !== undefined) return { kind: 'cell', cell: u.cell };
   return null;
+}
+
+/** Inverse of cellToWorld; undefined when the point falls outside the board. */
+export function worldToCell(point) {
+  if (!levelRef) return undefined;
+  const c = Math.round(point.x / CELL + (levelRef.cols - 1) / 2);
+  const r = Math.round(point.z / CELL + (levelRef.rows - 1) / 2);
+  if (c < 0 || c >= levelRef.cols || r < 0 || r >= levelRef.rows) return undefined;
+  return r * levelRef.cols + c;
 }
 
 /* ---------------- frame loop ---------------- */

@@ -12,7 +12,6 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const ROOT = __dirname;
 const DATA_DIR = process.env.TT_DATA_DIR || path.join(ROOT, 'data');
@@ -57,6 +56,10 @@ function rateLimited(ip) {
   let b = rateBuckets.get(ip);
   if (!b || now - b.start > 60000) { b = { start: now, count: 0 }; rateBuckets.set(ip, b); }
   b.count++;
+  // Drop expired buckets so a long-lived process does not grow one entry per IP.
+  if (rateBuckets.size > 4096) {
+    for (const [k, v] of rateBuckets) if (now - v.start > 60000) rateBuckets.delete(k);
+  }
   return b.count > 120;
 }
 
@@ -209,10 +212,16 @@ async function handleApi(req, res, url) {
 /* ---------------- static files ---------------- */
 
 function serveStatic(req, res, url) {
-  let rel = decodeURIComponent(url.pathname);
+  let rel;
+  try { rel = decodeURIComponent(url.pathname); }
+  catch { res.writeHead(400); return res.end('bad path'); }
+  if (rel.split(/[\\/]/).some(part => part.startsWith('.'))) { res.writeHead(403); return res.end('forbidden'); }
   if (rel === '/') rel = '/index.html';
   const file = path.normalize(path.join(ROOT, rel));
-  if (!file.startsWith(ROOT) || file.includes(`${path.sep}data${path.sep}`) || file.includes(`${path.sep}.git${path.sep}`)) {
+  // `startsWith(ROOT)` alone would also accept sibling directories whose name
+  // merely begins with ROOT, so require a separator (or ROOT itself).
+  const inRoot = file === ROOT || file.startsWith(ROOT + path.sep);
+  if (!inRoot || file.includes(`${path.sep}data${path.sep}`) || file.includes(`${path.sep}.git${path.sep}`)) {
     res.writeHead(403); return res.end('forbidden');
   }
   fs.stat(file, (err, st) => {
@@ -224,6 +233,7 @@ function serveStatic(req, res, url) {
       'content-length': st.size,
       'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
+    if (req.method === 'HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
   });
 }

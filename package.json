@@ -6,13 +6,16 @@
     "start": "node server.js",
     "test": "vitest run",
     "check": "node --check server.js && node --check src/rules.js && node --check src/content.js && node --check src/session.js && node --check src/audio.js && node --check src/ui.js && node --check src/main.js && node --check src/render.js",
-    "smoke": "node tests/browser.smoke.mjs"
+    "smoke": "node tests/hosted-smoke.mjs",
+    "test:e2e": "node tests/e2e.mjs"
   },
   "dependencies": {
     "three": "^0.185.1"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
+    "playwright-core": "^1.63.0",
     "vitest": "^4.1.11"
-  }
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
 }

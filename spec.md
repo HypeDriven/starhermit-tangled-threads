@@ -70,6 +70,8 @@ Every transition has one owner and an explicit reason. Backgrounding pauses solo
 
 The Three.js canvas fills the game region but is never the only UI. Menus, text, forms, chat, settings, and assistive descriptions use semantic HTML over or beside the canvas. Maintain a single shared layout model so DOM labels align with projected Three.js targets.
 
+The DOM board mirror is a permanent, always-interactive second control surface for the same board. When WebGL is available it docks to a screen corner as a compact labelled panel so the 3D playfield stays the visual hero; when WebGL is unavailable it becomes the full-size playfield inside the compatibility screen. Both surfaces dispatch through the identical action path, so pointer, touch, keyboard, and assistive-technology users share one rules engine and one score.
+
 ### Responsive layouts
 
 - **Wide desktop (≥1024 CSS px):** centered playfield, objective/progression rail on the left, contextual actions and social/status rail on the right. Maximum line length is 70 characters.

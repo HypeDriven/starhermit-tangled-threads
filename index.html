@@ -91,14 +91,37 @@
 
   kbd { background: #555; border-radius: .3rem; padding: .05rem .4rem; font-size: .85em; }
 
-  #sr-announcer { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #sr-announcer, #sr-errors { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
 
   /* DOM accessibility mirror / no-WebGL fallback board */
-  #dom-board { display: grid; gap: 4px; margin: 1rem auto; }
-  #dom-board button { width: 44px; height: 44px; border-radius: .4rem; border: 2px solid var(--panel-border);
-    background: var(--pill); color: #fff; font-weight: 700; font-size: .8rem; }
-  #compat-msg { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
-    background: var(--bg); padding: 2rem; text-align: center; }
+  #dom-board { display: grid; gap: 4px; margin: 1rem auto;
+    grid-template-columns: repeat(var(--cols, 4), var(--mirror-cell, 44px)); }
+  #dom-board button { width: var(--mirror-cell, 44px); height: var(--mirror-cell, 44px); border-radius: .4rem;
+    border: 2px solid var(--panel-border); background: var(--pill); color: #fff; font-weight: 700; font-size: .8rem; }
+  #dom-board button.sel { box-shadow: 0 0 0 3px var(--accent); }
+  #dom-board button.cursor { outline: 3px dashed var(--focus); outline-offset: 1px; }
+  #mirror-caption { font-size: .8rem; opacity: .8; margin-bottom: .35rem; }
+
+  /* With the 3D board live, the mirror docks to the edge as a compact secondary
+     control surface so the Three.js playfield stays the visual hero. */
+  body.webgl-3d #scr-board-mirror { align-items: flex-start; justify-content: flex-start;
+    padding-top: calc(var(--safe-t) + 5rem); }
+  body.webgl-3d #mirror-panel { --mirror-cell: 30px; background: var(--panel);
+    border: 1px solid var(--panel-border); border-radius: .7rem; padding: .5rem .6rem; }
+  body.webgl-3d #dom-board { margin: 0; gap: 3px; }
+  body.left-handed.webgl-3d #scr-board-mirror { align-items: flex-end; }
+  @media (max-width: 480px) {
+    body.webgl-3d #mirror-panel { --mirror-cell: 26px; }
+  }
+  /* Compatibility notice: a banner, never a blocking overlay — the DOM board
+     stays the playfield and every menu underneath must remain clickable. */
+  #compat-msg { position: fixed; top: var(--safe-t); left: var(--safe-l); right: var(--safe-r); z-index: 25;
+    background: var(--panel); border-bottom: 1px solid var(--panel-border);
+    padding: .6rem 1rem; text-align: center; }
+  #compat-msg h2 { font-size: 1rem; margin-bottom: .15rem; }
+  #compat-msg .tagline { font-size: .85rem; margin: 0 auto; }
+  body.no-webgl #hud { top: calc(var(--safe-t) + var(--compat-h, 4rem)); }
 
   @media (min-width: 1024px) {
     .screen { padding-left: 3rem; padding-right: 3rem; }
@@ -231,15 +254,15 @@
 
 <!-- DOM accessibility mirror of the board -->
 <div class="screen transparent" id="scr-board-mirror" hidden aria-label="Board mirror">
-  <div id="dom-board" role="group" aria-label="Board cells"></div>
+  <div id="mirror-panel">
+    <p id="mirror-caption" hidden>Board mirror</p>
+    <div id="dom-board" role="group" aria-label="Board cells"></div>
+  </div>
 </div>
 
-<div id="compat-msg" hidden>
-  <div>
-    <h2>3D unavailable</h2>
-    <p class="tagline">Your browser could not create a WebGL context. The simplified board below remains fully playable; your progress is preserved.</p>
-    <div id="compat-board-slot"></div>
-  </div>
+<div id="compat-msg" role="status" hidden>
+  <h2>3D unavailable</h2>
+  <p class="tagline">Your browser could not create a WebGL context. The board below stays fully playable and your progress is preserved.</p>
 </div>
 
 <div id="sr-announcer" aria-live="polite"></div>

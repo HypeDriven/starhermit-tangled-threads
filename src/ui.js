@@ -1,6 +1,8 @@
 // Tangled Threads — DOM shell: screens, settings, progression, platform adapter,
 // accessibility mirror. UI state is fully separate from simulation state.
 
+import { STRAND_COLORS, STRAND_COLORS_CVD } from './content.js';
+
 /* ---------------- settings (versioned, checksummed, local) ---------------- */
 
 const SETTINGS_KEY = 'tt-settings-v1';
@@ -142,13 +144,40 @@ export function vibrate(settings, pattern = 12) {
 
 /* ---------------- DOM board mirror (accessibility + WebGL fallback) ---------------- */
 
+/** strand.color is a palette index, not an RGB value. */
+export function strandHex(colorIdx, cvd = false) {
+  const palette = cvd ? STRAND_COLORS_CVD : STRAND_COLORS;
+  return '#' + palette[colorIdx % palette.length].toString(16).padStart(6, '0');
+}
+
+/** Readable label colour for a filled cell (sRGB relative luminance). */
+function inkOn(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L > 0.4 ? '#1a1310' : '#ffffff';
+}
+
+/** Moves the keyboard-cursor highlight without rebuilding the grid. */
+export function setDomCursor(container, cell) {
+  for (const b of container.children) {
+    const on = +b.dataset.cell === cell;
+    b.classList.toggle('cursor', on);
+    if (on) b.setAttribute('aria-current', 'location'); else b.removeAttribute('aria-current');
+  }
+}
+
 /**
  * Renders an interactive grid of buttons mirroring the board state.
- * onCell(cell) is called when a cell button is activated.
+ * opts: { selection, cursor, cvd }. onCell(cell) fires when a cell is activated.
  */
-export function renderDomBoard(container, state, theme, onCell) {
+export function renderDomBoard(container, state, opts, onCell) {
+  const { selection = -1, cursor = -1, cvd = false } = opts || {};
+  // Rebuilding the grid must not drop the keyboard user's place.
+  const focused = document.activeElement;
+  const refocus = focused && container.contains(focused) ? focused.dataset.cell : null;
   container.innerHTML = '';
-  container.style.gridTemplateColumns = `repeat(${state.cols}, 44px)`;
+  container.style.setProperty('--cols', state.cols);
   const cellInfo = new Map();
   state.strands.forEach((s, i) => {
     s.path.forEach((cell, k) => cellInfo.set(cell, { strand: i, tip: k === s.path.length - 1, anchor: k === 0, done: s.done }));
@@ -160,18 +189,31 @@ export function renderDomBoard(container, state, theme, onCell) {
     b.dataset.cell = cell;
     const info = cellInfo.get(cell);
     const r = Math.floor(cell / state.cols), c = cell % state.cols;
-    if (info?.spool !== undefined && info.spool !== null && cellInfo.get(cell)?.spool !== undefined && info.tip === undefined) {
+    const where = `row ${r + 1} column ${c + 1}`;
+    if (info && info.strand !== undefined) {
+      const hex = strandHex(state.strands[info.strand].color, cvd);
+      b.textContent = info.tip ? (info.spool !== undefined ? '◉' : '●') : '—';
+      b.style.background = hex;
+      b.style.color = inkOn(hex);
+      b.style.borderColor = hex;
+      if (info.done) b.style.opacity = '.45';
+      const part = info.tip ? 'tip' : info.anchor ? 'anchor' : 'body';
+      b.setAttribute('aria-label',
+        `Strand ${info.strand + 1} ${part}${info.done ? ', reeled in' : ''}${info.spool !== undefined ? ', on its spool' : ''}, ${where}`);
+      if (info.strand === selection) b.classList.add('sel');
+    } else if (info && info.spool !== undefined) {
+      const hex = strandHex(state.strands[info.spool].color, cvd);
       b.textContent = '◉';
-      b.style.borderColor = '#' + state.strands[info.spool].color.toString(16).padStart(6, '0');
-      b.setAttribute('aria-label', `Spool for strand ${info.spool + 1}, row ${r + 1} column ${c + 1}`);
-    } else if (info) {
-      b.textContent = info.tip ? '●' : '—';
-      b.style.background = '#' + state.strands[info.strand].color.toString(16).padStart(6, '0');
-      b.setAttribute('aria-label', `Strand ${info.strand + 1} ${info.tip ? 'tip' : info.anchor ? 'anchor' : 'body'}, row ${r + 1} column ${c + 1}`);
+      b.style.borderColor = hex;
+      b.style.color = hex;
+      b.setAttribute('aria-label', `Empty spool for strand ${info.spool + 1}, ${where}`);
+      if (info.spool === selection) b.classList.add('sel');
     } else {
-      b.setAttribute('aria-label', `Empty cell, row ${r + 1} column ${c + 1}`);
+      b.setAttribute('aria-label', `Empty cell, ${where}`);
     }
+    if (cell === cursor) { b.classList.add('cursor'); b.setAttribute('aria-current', 'location'); }
     b.addEventListener('click', () => onCell(cell));
     container.appendChild(b);
   }
+  if (refocus != null) container.querySelector(`[data-cell="${refocus}"]`)?.focus();
 }

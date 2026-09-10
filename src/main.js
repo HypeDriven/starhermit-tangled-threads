@@ -97,10 +97,10 @@ function selectMode(mode) {
   list.hidden = true;
   const info = {
     learn: ['Learn', 'One guided lesson board. ~2 min · 1 player · assists allowed · not ranked.'],
-    journey: ['Journey', 'Pick a stage below. ~2–5 min each · 1 player · undo allowed · ranked locally.'],
+    journey: ['Journey', 'Pick a stage below. ~2–5 min each · 1 player · undo allowed · globally ranked.'],
     daily: ['Daily challenge', 'One shared seed for everyone this UTC day. ~3 min · 1 player · no undo · globally ranked.'],
     practice: ['Practice', 'Easy, medium, or hard board from a fresh seed. No rating effect.'],
-    challenge: ['Challenge', '12 boards with tight move limits. ~3 min · ranked locally.'],
+    challenge: ['Challenge', '12 boards with tight move limits. ~3 min · globally ranked.'],
   }[mode];
   $('mode-detail-name').textContent = info[0];
   $('mode-detail-info').textContent = info[1];
@@ -303,6 +303,8 @@ function explain(reason) {
     'too-short': 'Nothing to pull back.',
     'game-over': 'This round is over.',
     'not-active': 'The round is not active.',
+    'no-undo': 'Undo is not available in the daily challenge.',
+    'nothing-to-undo': 'Nothing to undo yet.',
   };
   const msg = msgs[reason] || 'That action is not legal.';
   ui.announceError(msg);

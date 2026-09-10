@@ -236,6 +236,15 @@ describe('session', () => {
     expect(s.dispatch({ type: 'extend', strand: 0, cell: 0 }).reason).toBe('not-active');
   });
 
+  it('rejects undo in the daily challenge', () => {
+    const s = new Session(dailySeedString(new Date('2026-09-09T12:00:00Z')));
+    s.setPhase('active', 'test');
+    const cell = s.level.solution[0][1];
+    expect(s.dispatch({ type: 'extend', strand: 0, cell }).ok).toBe(true);
+    expect(s.undo()).toEqual({ ok: false, reason: 'no-undo' });
+    expect(s.state.strands[0].path.length).toBe(2);
+  });
+
   it('snapshot restore reconstructs the exact state', () => {
     const s = new Session('stage-3');
     s.setPhase('active', 'test');

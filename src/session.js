@@ -82,6 +82,7 @@ export class Session {
   /** Undo the last applied command (practice/learn/journey; not daily ranked). */
   undo() {
     if (this.phase !== 'active') return { ok: false, reason: 'not-active' };
+    if (this.mode === 'daily') return { ok: false, reason: 'no-undo' };
     if (!this.log.length) return { ok: false, reason: 'nothing-to-undo' };
     const keep = this.log.slice(0, -1);
     const r = replay(this.level, keep);

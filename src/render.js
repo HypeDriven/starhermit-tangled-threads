@@ -338,6 +338,10 @@ const pointerV = new THREE.Vector2();
 /** Raycast only gameplay-layer objects. Returns { kind, cell?, strand? } or null. */
 export function pick(clientX, clientY) {
   if (!renderer || !levelRef) return null;
+  // Camera shake must never change raycast truth: pick with the unshaken camera.
+  const shakenX = camera.position.x;
+  camera.position.x = 0;
+  camera.updateMatrixWorld();
   const rect = canvas.getBoundingClientRect();
   pointerV.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   pointerV.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -347,6 +351,8 @@ export function pick(clientX, clientY) {
   for (const g of spoolMeshes) targets.push(...g.children);
   for (const g of strandGroups) targets.push(...g.children);
   const hits = raycaster.intersectObjects(targets, false);
+  camera.position.x = shakenX;
+  camera.updateMatrixWorld();
   if (!hits.length) return null;
   const u = hits[0].object.userData;
   if (u.spool) return { kind: 'spool', strand: u.strand, cell: levelRef.strands[u.strand].spool };

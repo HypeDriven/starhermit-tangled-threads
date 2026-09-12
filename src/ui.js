@@ -1,5 +1,6 @@
-// Tangled Threads — DOM shell: screens, settings, progression, platform adapter,
+// Tangled Threads — DOM shell: screens, settings, progression, storage,
 // accessibility mirror. UI state is fully separate from simulation state.
+// The StarHermit platform adapter lives in platform.js.
 
 import { STRAND_COLORS, STRAND_COLORS_CVD } from './content.js';
 
@@ -22,7 +23,7 @@ export const defaultSettings = {
   tutorialDone: false,
 };
 
-function checksum(obj) {
+export function checksum(obj) {
   const s = JSON.stringify(obj);
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
@@ -68,62 +69,6 @@ export function loadSnapshot() {
   try { const raw = localStorage.getItem(SNAPSHOT_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 export function clearSnapshot() { try { localStorage.removeItem(SNAPSHOT_KEY); } catch {} }
-
-/* ---------------- platform adapter (hosted API, offline-tolerant) ---------------- */
-
-let timeOffsetMs = 0;
-
-export async function syncServerTime() {
-  try {
-    const t0 = Date.now();
-    const res = await fetch('/api/v1/time');
-    const t1 = Date.now();
-    if (!res.ok) return { ok: false };
-    const body = await res.json();
-    timeOffsetMs = body.epochMs - Math.round((t0 + t1) / 2);
-    return { ok: true, offsetMs: timeOffsetMs };
-  } catch { return { ok: false }; }
-}
-
-export function serverNow() { return new Date(Date.now() + timeOffsetMs); }
-
-export async function fetchDailyInfo() {
-  try {
-    const res = await fetch('/api/v1/daily');
-    if (!res.ok) return { ok: false };
-    return { ok: true, ...(await res.json()) };
-  } catch { return { ok: false }; }
-}
-
-export async function submitScore(envelope) {
-  try {
-    const res = await fetch('/api/v1/score', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(envelope),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: body.error || 'submit-failed' };
-    return { ok: true, ...body };
-  } catch { return { ok: false, error: 'offline' }; }
-}
-
-export async function fetchLeaderboard(levelId) {
-  try {
-    const res = await fetch('/api/v1/leaderboard?level=' + encodeURIComponent(levelId));
-    if (!res.ok) return { ok: false };
-    return { ok: true, ...(await res.json()) };
-  } catch { return { ok: false }; }
-}
-
-export async function postAchievements(keys) {
-  try {
-    const res = await fetch('/api/v1/achievements', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys }),
-    });
-    return { ok: res.ok };
-  } catch { return { ok: false }; }
-}
 
 /* ---------------- DOM helpers ---------------- */
 

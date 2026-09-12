@@ -113,7 +113,7 @@ function dailySeedString(date) {
 
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/v1/time' && req.method === 'GET') {
-    return sendJson(res, 200, { epochMs: Date.now(), iso: new Date().toISOString() });
+    return sendJson(res, 200, { epochMs: Date.now(), iso: new Date().toISOString(), server: 'tangled-threads' });
   }
 
   if (url.pathname === '/api/v1/daily' && req.method === 'GET') {

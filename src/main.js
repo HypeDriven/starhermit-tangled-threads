@@ -3,12 +3,13 @@
 
 import { checkAction } from './rules.js';
 import {
-  generateLevel, validateLevel, STAGE_COUNT, TUTORIAL_STEPS, ACHIEVEMENTS, stageId, dailySeedString,
+  generateLevel, validateLevel, STAGE_COUNT, TUTORIAL_STEPS, ACHIEVEMENTS, stageId, dailySeedString, isValidLevelId,
 } from './content.js';
 import { Session } from './session.js';
 import * as render from './render.js';
 import * as audio from './audio.js';
 import * as ui from './ui.js';
+import { platform } from './platform.js';
 
 const $ = ui.$;
 
@@ -22,6 +23,36 @@ let tutorialStep = 0;
 let timerInterval = 0;
 let pendingMode = null;
 let dragState = null;
+
+/* ================= persistence (localStorage cache + cloud mirror) ================= */
+
+function saveSettingsDoc(s) { ui.saveSettings(s); platform.queueCloudSave(); }
+function saveProgressDoc(p) { ui.saveProgress(p); platform.queueCloudSave(); }
+
+/* ================= platform identity / sync status ================= */
+
+const SYNC_LABELS = {
+  synced: 'cloud save synced',
+  saving: 'saving…',
+  offline: 'offline — will sync when possible',
+  error: 'sync problem',
+};
+
+function titleProgressText() {
+  const done = Object.keys(progress.stagesDone).length;
+  return done > 0
+    ? `Journey progress: ${done}/${STAGE_COUNT} stages complete.`
+    : 'A cozy routing puzzle on a fiber-art worktable.';
+}
+
+function updatePlayerLine() {
+  const el = $('player-line');
+  if (!el) return;
+  if (!platform.hosted) { el.hidden = true; return; }
+  el.hidden = false;
+  const label = SYNC_LABELS[platform.syncStatus];
+  el.textContent = label ? `${platform.nickname} · ${label}` : platform.nickname;
+}
 
 /* ================= settings apply ================= */
 
@@ -50,14 +81,14 @@ function applySettings() {
     render.syncState(session.state, selection);
     ui.renderDomBoard($('dom-board'), session.state, mirrorOpts(), onMirrorCell);
   }
-  ui.saveSettings(settings);
+  saveSettingsDoc(settings);
 }
 
 function bindSettings() {
   const vol = (id, bus) => $(id).addEventListener('input', (e) => {
     settings.volumes[bus] = e.target.value / 100;
     audio.setBusVolume(bus, settings.volumes[bus]);
-    ui.saveSettings(settings);
+    saveSettingsDoc(settings);
   });
   vol('vol-music', 'music'); vol('vol-effects', 'effects'); vol('vol-ambience', 'ambience'); vol('vol-voice', 'voice');
   $('sel-quality').addEventListener('change', (e) => { settings.quality = +e.target.value; applySettings(); });
@@ -76,10 +107,7 @@ function showTitle() {
   session = null;
   ui.showOnly('scr-title');
   $('hud').hidden = true; $('hint-bar').hidden = true; $('action-tray').hidden = true;
-  const done = Object.keys(progress.stagesDone).length;
-  $('title-progress').textContent = done > 0
-    ? `Journey progress: ${done}/${STAGE_COUNT} stages complete.`
-    : 'A cozy routing puzzle on a fiber-art worktable.';
+  $('title-progress').textContent = titleProgressText();
   $('btn-play').focus();
 }
 
@@ -129,6 +157,22 @@ function selectMode(mode) {
 }
 
 /* ================= session lifecycle ================= */
+
+// The daily seed is derivable from the platform clock alone; when the game's
+// own backend is present its daily record wins (excluded days are marked).
+async function startDaily() {
+  let seed = dailySeedString(platform.serverNow());
+  const info = await platform.fetchDailyInfo();
+  if (info.ok && typeof info.seed === 'string' && isValidLevelId(info.seed) && info.seed.startsWith('daily-')) {
+    seed = info.seed;
+  }
+  startLevel(seed);
+  if (info.ok && info.excluded && session && session.level.id === seed) {
+    session.ranked = false;
+    $('hint-bar').hidden = false;
+    $('hint-text').textContent = "Today's puzzle is marked excluded from ranking — play is unranked.";
+  }
+}
 
 function startLevel(levelId) {
   const level = generateLevel(levelId);
@@ -190,7 +234,7 @@ function finishRound() {
   // Progression & achievements (idempotent).
   const unlocked = [];
   const grant = (key) => { if (!progress.achievements[key]) { progress.achievements[key] = Date.now(); unlocked.push(key); } };
-  const today = ui.serverNow().toISOString().slice(0, 10);
+  const today = platform.serverNow().toISOString().slice(0, 10);
   progress.daysPlayed[today] = true;
   if (t.reason === 'complete') {
     grant('first-completion');
@@ -206,20 +250,18 @@ function finishRound() {
     if (session.level.mode === 'daily') progress.dailiesDone[id] = score.total;
     if (Object.keys(progress.daysPlayed).length >= 3) grant('streak-3');
   }
-  ui.saveProgress(progress);
+  saveProgressDoc(progress);
   $('results-achievements').textContent = unlocked.length
     ? 'Achievement unlocked: ' + unlocked.map((k) => ACHIEVEMENTS.find((a) => a.key === k)?.name || k).join(', ')
     : '';
-  if (unlocked.length) ui.postAchievements(unlocked);
+  if (unlocked.length) platform.postAchievements(unlocked);
 
-  // Ranked submission with replay envelope; server re-validates deterministically.
+  // Ranked comparison: the own server re-validates the replay envelope when it
+  // is present; hosted play reads the platform leaderboard (read-only).
   $('results-compare').textContent = '';
   if (session.ranked && t.reason === 'complete') {
-    ui.submitScore(session.replayEnvelope()).then((r) => {
-      $('results-compare').textContent = r.ok
-        ? `Global rank #${r.rank} of ${r.entries} on this board.`
-        : r.error === 'offline' ? 'Offline — score kept locally.' : `Score not ranked (${r.error}).`;
-    });
+    platform.compareResult(session.replayEnvelope(), progress.bestScores[session.level.id])
+      .then((line) => { $('results-compare').textContent = line; });
   }
   if (t.reason === 'complete') { audio.sfx.complete(); } else { audio.sfx.fail(); }
   ui.announce($('results-h').textContent + ' Total score ' + score.total);
@@ -270,7 +312,7 @@ function tutorialCheck(eventType, strand) {
     tutorialStep++;
     if (tutorialStep >= TUTORIAL_STEPS.length) {
       settings.tutorialDone = true;
-      ui.saveSettings(settings);
+      saveSettingsDoc(settings);
     }
     updateTutorialText();
   }
@@ -560,7 +602,7 @@ function boot() {
   document.querySelectorAll('.mode-card[data-mode]').forEach((b) => b.addEventListener('click', () => { audio.sfx.uiClick(); selectMode(b.dataset.mode); }));
   $('btn-mode-start').addEventListener('click', () => {
     if (pendingMode === 'learn') startLevel('tutorial');
-    else if (pendingMode === 'daily') startLevel(dailySeedString(ui.serverNow()));
+    else if (pendingMode === 'daily') startDaily();
   });
   $('btn-mode-back').addEventListener('click', showModes);
   $('btn-help-close').addEventListener('click', () => {
@@ -599,8 +641,21 @@ function boot() {
   // First gesture unlocks audio.
   window.addEventListener('pointerdown', () => audio.startAudio(), { once: true });
 
-  // Platform: time sync (offline tolerant), then title.
-  ui.syncServerTime();
+  // Platform: token profile, cloud save mirror, token refresh — all
+  // offline-tolerant. A remote save wins over the local cache.
+  platform.onIdentity = updatePlayerLine;
+  platform.onSync = updatePlayerLine;
+  updatePlayerLine();
+  platform.init().then((result) => {
+    if (!result.remoteLoaded) return;
+    settings = ui.loadSettings();
+    progress = ui.loadProgress();
+    applySettings();
+    if (!session) {
+      $('title-progress').textContent = titleProgressText();
+      platform.queueCloudSave(); // reconcile the mirror with the adopted doc
+    }
+  });
 
   // Reconnect: restore durable snapshot if present.
   const snap = ui.loadSnapshot();

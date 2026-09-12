@@ -205,7 +205,7 @@ function pauseGame(reason) {
   if (!session || session.phase !== 'active') return;
   session.setPhase('paused', reason);
   ui.saveSnapshot(session.snapshot());
-  ui.showOnly('scr-pause', 'scr-board-mirror');
+  ui.showOnly('scr-pause');
   $('btn-resume').focus();
   ui.announce('Paused.');
 }
@@ -275,6 +275,22 @@ function finishRound() {
 function fmtTime(ms) {
   const s = Math.floor(ms / 1000);
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+// Keep --hint-h in sync with the (possibly wrapped) hint bar so the action
+// tray always sits above it instead of over the lesson text.
+{
+  const bar = $('hint-bar');
+  const sync = () => {
+    const h = bar && !bar.hidden ? bar.getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty('--hint-h', `${Math.round(h)}px`);
+  };
+  if (bar) {
+    if (typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(bar);
+    new MutationObserver(sync).observe(bar, { attributes: true, attributeFilter: ['hidden'], childList: true, subtree: true, characterData: true });
+  }
+  window.addEventListener('resize', sync);
+  sync();
 }
 
 function updateHud() {

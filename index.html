@@ -28,7 +28,7 @@
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
   .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 1rem; padding: calc(1rem + var(--safe-t)) calc(1rem + var(--safe-r))
+    justify-content: safe center; gap: 1rem; padding: calc(1rem + var(--safe-t)) calc(1rem + var(--safe-r))
     calc(1rem + var(--safe-b)) calc(1rem + var(--safe-l)); text-align: center; z-index: 20;
     overflow-y: auto; background: rgba(20,14,10,.45); }
   .screen.transparent { background: transparent; pointer-events: none; }
@@ -66,8 +66,9 @@
     display: flex; justify-content: center; z-index: 10; pointer-events: none; padding: 0 .5rem; }
   #hint-bar .pill { max-width: 70ch; text-align: center; line-height: 1.4; }
 
-  /* Action tray (thumb zone) */
-  #action-tray { position: fixed; bottom: calc(var(--safe-b) + 3.6rem); left: 0; right: 0; z-index: 11;
+  /* Action tray (thumb zone) — stacked above the hint bar, whose measured
+     height (--hint-h, set from main.js) reserves room for wrapped lesson text */
+  #action-tray { position: fixed; bottom: calc(var(--safe-b) + var(--hint-h, 3rem) + .6rem); left: 0; right: 0; z-index: 11;
     display: flex; justify-content: center; gap: .5rem; pointer-events: none; }
   #action-tray .ui-btn { pointer-events: auto; }
   body.left-handed #action-tray { flex-direction: row-reverse; }
@@ -107,6 +108,8 @@
      control surface so the Three.js playfield stays the visual hero. */
   body.webgl-3d #scr-board-mirror { align-items: flex-start; justify-content: flex-start;
     padding-top: calc(var(--safe-t) + 5rem); }
+  /* the mirror is a play surface; it yields to the pause dialog */
+  body:has(#scr-pause:not([hidden])) #scr-board-mirror { display: none !important; }
   body.webgl-3d #mirror-panel { --mirror-cell: 30px; background: var(--panel);
     border: 1px solid var(--panel-border); border-radius: .7rem; padding: .5rem .6rem; }
   body.webgl-3d #dom-board { margin: 0; gap: 3px; }

@@ -13,7 +13,8 @@ const SNAPSHOT_KEY = 'tt-session-v1';
 export const defaultSettings = {
   version: 1,
   volumes: { music: 0.5, effects: 0.8, ambience: 0.4, voice: 0.8 },
-  quality: 2,
+  quality: 2,            // legacy 0/1/2 tier; migrated into `graphics` on load
+  graphics: null,        // { preset, render_scale, adaptive, show_fps, <category> } — see gfx.js
   reducedMotion: false,
   highContrast: false,
   cvdPalette: false,

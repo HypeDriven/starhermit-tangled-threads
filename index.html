@@ -32,6 +32,8 @@
     calc(1rem + var(--safe-b)) calc(1rem + var(--safe-l)); text-align: center; z-index: 20;
     overflow-y: auto; background: rgba(20,14,10,.45); }
   .screen.transparent { background: transparent; pointer-events: none; }
+  /* the 3D board is a live backdrop behind the title: darken the centre so text keeps its contrast */
+  body.webgl-3d #scr-title { background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(20,14,10,.78), rgba(20,14,10,.4)); }
   .screen.transparent > * { pointer-events: auto; }
 
   h1.title { font-size: clamp(2rem, 7vw, 4rem); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
@@ -80,6 +82,21 @@
   .setting-row input[type="range"] { width: 9rem; min-height: 44px; }
   .setting-row select, .setting-row input[type="checkbox"] { min-height: 44px; min-width: 44px; font: inherit;
     background: var(--pill); color: var(--text); border: 1px solid var(--panel-border); border-radius: .4rem; padding: .2rem .5rem; }
+
+  /* Settings tabs + Graphics tab */
+  .settings-tabs { display: flex; gap: .5rem; margin-bottom: .5rem; border-bottom: 1px solid var(--panel-border); }
+  .settings-tabs [role="tab"] { min-height: 44px; padding: .4rem 1.1rem; background: transparent; color: var(--text);
+    border: none; border-bottom: 3px solid transparent; font-weight: 700; }
+  .settings-tabs [role="tab"][aria-selected="true"] { color: #ffe9c0; border-bottom-color: var(--accent); }
+  .gfx-row { flex-wrap: wrap; row-gap: .25rem; }
+  .gfx-row select { max-width: 100%; }
+  .range-wrap { display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap; }
+  .range-wrap output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+  .gfx-summary { font-size: .85rem; opacity: .85; margin-top: .6rem; line-height: 1.4; overflow-wrap: anywhere; }
+  #fps-meter { position: fixed; left: calc(var(--safe-l) + .4rem); bottom: calc(var(--safe-b) + .4rem); z-index: 30;
+    pointer-events: none; font: 700 .75rem/1 ui-monospace, monospace; color: #ffe9c0; background: rgba(20,14,10,.7);
+    padding: .25rem .45rem; border-radius: .3rem; }
+  @media (max-width: 480px) { .setting-row input[type="range"] { width: 7rem; } }
 
   .score-rows { width: 100%; border-collapse: collapse; margin: .5rem 0; }
   .score-rows td { padding: .35rem .5rem; border-bottom: 1px solid rgba(255,255,255,.1); }
@@ -202,13 +219,15 @@
       <button type="button" id="btn-restart" class="ui-btn secondary">Restart</button>
       <button type="button" id="btn-leave" class="ui-btn ghost">Leave round</button>
     </div>
-    <section aria-label="Settings" id="settings-block">
+    <div class="settings-tabs" role="tablist" aria-label="Settings">
+      <button type="button" role="tab" id="tab-general" data-settings-tab="general" aria-selected="true" aria-controls="settings-block">General</button>
+      <button type="button" role="tab" id="tab-graphics" data-settings-tab="graphics" aria-selected="false" aria-controls="gfx-block" tabindex="-1">Graphics</button>
+    </div>
+    <section aria-label="Settings" id="settings-block" role="tabpanel" aria-labelledby="tab-general">
       <div class="setting-row"><label for="vol-music">Music volume</label><input type="range" id="vol-music" min="0" max="100" value="50"></div>
       <div class="setting-row"><label for="vol-effects">Effects volume</label><input type="range" id="vol-effects" min="0" max="100" value="80"></div>
       <div class="setting-row"><label for="vol-ambience">Ambience volume</label><input type="range" id="vol-ambience" min="0" max="100" value="40"></div>
       <div class="setting-row"><label for="vol-voice">Voice/cue volume</label><input type="range" id="vol-voice" min="0" max="100" value="80"></div>
-      <div class="setting-row"><label for="sel-quality">Graphics quality</label>
-        <select id="sel-quality"><option value="0">Low</option><option value="1">Medium</option><option value="2" selected>High</option></select></div>
       <div class="setting-row"><label for="chk-motion">Reduced motion</label><input type="checkbox" id="chk-motion"></div>
       <div class="setting-row"><label for="chk-contrast">High contrast</label><input type="checkbox" id="chk-contrast"></div>
       <div class="setting-row"><label for="chk-cvd">Color-vision-safe palette</label><input type="checkbox" id="chk-cvd"></div>
@@ -216,6 +235,16 @@
       <div class="setting-row"><label for="chk-left">Left-handed controls</label><input type="checkbox" id="chk-left"></div>
       <div class="setting-row"><label for="chk-haptics">Haptics (vibration)</label><input type="checkbox" id="chk-haptics" checked></div>
       <div class="setting-row"><label for="btn-replay-tut">Tutorial</label><button type="button" id="btn-replay-tut" class="ui-btn small secondary">Replay tutorial</button></div>
+    </section>
+    <section id="gfx-block" role="tabpanel" aria-labelledby="tab-graphics" hidden>
+      <div class="setting-row gfx-row"><label for="sel-quality" id="gfx-l-quality">Quality</label><select id="sel-quality" data-gfx="preset"></select></div>
+      <div class="setting-row gfx-row"><label for="gfx-scale" id="gfx-l-scale">Render scale</label>
+        <span class="range-wrap"><input type="range" id="gfx-scale" data-gfx="render_scale" min="50" max="200" step="5" value="100"><output id="gfx-scale-val" for="gfx-scale">100%</output></span></div>
+      <div id="gfx-cats"></div>
+      <div class="setting-row"><label for="gfx-adaptive" id="gfx-l-adaptive">Adaptive resolution</label><input type="checkbox" id="gfx-adaptive" data-gfx="adaptive" checked></div>
+      <div class="setting-row"><label for="gfx-fps" id="gfx-l-fps">Show frame rate</label><input type="checkbox" id="gfx-fps" data-gfx="show_fps"></div>
+      <p id="gfx-summary" class="gfx-summary" aria-live="polite"></p>
+      <p id="gfx-post-note" class="gfx-summary" role="status" hidden></p>
     </section>
   </div>
 </div>
@@ -272,7 +301,7 @@
 <div id="sr-announcer" aria-live="polite"></div>
 <div id="sr-errors" aria-live="assertive"></div>
 
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

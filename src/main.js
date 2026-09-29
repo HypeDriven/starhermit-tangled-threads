@@ -10,10 +10,12 @@ import * as render from './render.js';
 import * as audio from './audio.js';
 import * as ui from './ui.js';
 import { platform } from './platform.js';
+import { PRESETS, CATEGORIES, presetTier, choosePreset } from './gfx.js';
+import { gfxStrings } from './gfx-i18n.js';
 
 const $ = ui.$;
 
-let settings = ui.loadSettings();
+let settings = migrateGraphics(ui.loadSettings());
 let progress = ui.loadProgress();
 let session = null;
 let selection = -1;
@@ -56,11 +58,19 @@ function updatePlayerLine() {
 
 /* ================= settings apply ================= */
 
+/** Older saves carried a 0/1/2 quality tier; map it onto the preset model once. */
+function migrateGraphics(s) {
+  if (!s.graphics || typeof s.graphics !== 'object') {
+    s.graphics = { preset: s.quality === 0 ? 'low' : s.quality === 1 ? 'balanced' : 'auto' };
+  }
+  return s;
+}
+
 function applySettings() {
   document.body.classList.toggle('high-contrast', settings.highContrast);
   document.body.classList.toggle('text-large', settings.largeText);
   document.body.classList.toggle('left-handed', settings.leftHanded);
-  render.setQuality(settings.quality);
+  render.setGraphics(settings.graphics);
   render.setReducedMotion(settings.reducedMotion || matchMedia('(prefers-reduced-motion: reduce)').matches);
   render.setCvdPalette(settings.cvdPalette);
   for (const bus of ['music', 'effects', 'ambience', 'voice']) audio.setBusVolume(bus, settings.volumes[bus]);
@@ -69,7 +79,7 @@ function applySettings() {
   $('vol-effects').value = Math.round(settings.volumes.effects * 100);
   $('vol-ambience').value = Math.round(settings.volumes.ambience * 100);
   $('vol-voice').value = Math.round(settings.volumes.voice * 100);
-  $('sel-quality').value = String(settings.quality);
+  renderGfxPanel();
   $('chk-motion').checked = settings.reducedMotion;
   $('chk-contrast').checked = settings.highContrast;
   $('chk-cvd').checked = settings.cvdPalette;
@@ -91,7 +101,7 @@ function bindSettings() {
     saveSettingsDoc(settings);
   });
   vol('vol-music', 'music'); vol('vol-effects', 'effects'); vol('vol-ambience', 'ambience'); vol('vol-voice', 'voice');
-  $('sel-quality').addEventListener('change', (e) => { settings.quality = +e.target.value; applySettings(); });
+  bindGfxPanel();
   $('chk-motion').addEventListener('change', (e) => { settings.reducedMotion = e.target.checked; applySettings(); });
   $('chk-contrast').addEventListener('change', (e) => { settings.highContrast = e.target.checked; applySettings(); });
   $('chk-cvd').addEventListener('change', (e) => { settings.cvdPalette = e.target.checked; applySettings(); });
@@ -101,10 +111,138 @@ function bindSettings() {
   $('btn-replay-tut').addEventListener('click', () => { startLevel('tutorial'); });
 }
 
+/* ================= Graphics settings tab ================= */
+
+const GT = gfxStrings(navigator.language);
+
+function setSettingsTab(which) {
+  for (const b of document.querySelectorAll('[data-settings-tab]')) {
+    const on = b.dataset.settingsTab === which;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  }
+  $('settings-block').hidden = which !== 'general';
+  $('gfx-block').hidden = which !== 'graphics';
+  if (which === 'graphics') renderGfxPanel();
+}
+
+function optionEl(value, label) {
+  const o = document.createElement('option');
+  o.value = value; o.textContent = label;
+  return o;
+}
+
+/** Builds the static parts of the Graphics tab (labels, category rows) once. */
+function buildGfxPanel() {
+  $('tab-general').textContent = GT.tabGeneral;
+  $('tab-graphics').textContent = GT.tabGraphics;
+  $('gfx-l-quality').textContent = GT.quality;
+  $('gfx-l-scale').textContent = GT.renderScale;
+  $('gfx-l-adaptive').textContent = GT.adaptive;
+  $('gfx-l-fps').textContent = GT.showFps;
+  $('gfx-post-note').textContent = GT.postFailed;
+  const cats = $('gfx-cats');
+  cats.innerHTML = '';
+  for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+    const row = document.createElement('div');
+    row.className = 'setting-row gfx-row';
+    const label = document.createElement('label');
+    label.htmlFor = 'gfx-' + cat;
+    label.textContent = GT.cat[cat];
+    const sel = document.createElement('select');
+    sel.id = 'gfx-' + cat;
+    sel.dataset.gfx = cat;
+    sel.append(optionEl('preset', ''));
+    for (const t of tiers) sel.append(optionEl(t, GT.tier[t]));
+    row.append(label, sel);
+    cats.append(row);
+  }
+}
+
+/** Reflects saved + resolved graphics state into the tab's controls and summary. */
+function renderGfxPanel() {
+  if (!$('gfx-shadows')) buildGfxPanel();
+  const g = settings.graphics || {};
+  const info = render.graphicsInfo(GT.summary);
+  const r = info.resolved;
+  const q = $('sel-quality');
+  q.innerHTML = '';
+  q.append(optionEl('auto', GT.auto.replace('{tier}', GT.preset[info.detected])));
+  for (const p of PRESETS) q.append(optionEl(p, GT.preset[p]));
+  q.value = PRESETS.includes(g.preset) ? g.preset : 'auto';
+  const pct = Math.round((Number(g.render_scale) || 1) * 100);
+  $('gfx-scale').value = pct;
+  $('gfx-scale-val').textContent = pct + '%';
+  for (const cat of Object.keys(CATEGORIES)) {
+    const sel = $('gfx-' + cat);
+    sel.options[0].textContent = GT.fromPreset.replace('{tier}', GT.tier[presetTier(r.preset, cat)]);
+    sel.value = CATEGORIES[cat].includes(g[cat]) ? g[cat] : 'preset';
+  }
+  $('gfx-adaptive').checked = g.adaptive !== false;
+  $('gfx-fps').checked = !!g.show_fps;
+  $('gfx-summary').textContent = [info.gpu || GT.unknownGpu, info.summary].join(' · ');
+  $('gfx-post-note').hidden = !info.postFailed;
+}
+
+function commitGfx(next) {
+  settings.graphics = next;
+  render.setGraphics(settings.graphics);
+  saveSettingsDoc(settings);
+  renderGfxPanel();
+  // Detail changes rebuild the scene: keep the live board in step.
+  if (session) render.syncState(session.state, selection);
+  // The drawing buffer is resized on the next frame; refresh the WxH summary then.
+  requestAnimationFrame(() => requestAnimationFrame(renderGfxPanel));
+}
+
+function bindGfxPanel() {
+  if (!$('gfx-shadows')) buildGfxPanel();
+  document.querySelectorAll('[data-settings-tab]').forEach((b) => {
+    b.addEventListener('click', () => setSettingsTab(b.dataset.settingsTab));
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const next = b.dataset.settingsTab === 'general' ? 'graphics' : 'general';
+      setSettingsTab(next);
+      $(next === 'general' ? 'tab-general' : 'tab-graphics').focus();
+    });
+  });
+  // Choosing a preset clears per-effect overrides.
+  $('sel-quality').addEventListener('change', (e) => commitGfx(choosePreset(settings.graphics, e.target.value)));
+  $('gfx-scale').addEventListener('input', (e) => { $('gfx-scale-val').textContent = e.target.value + '%'; });
+  $('gfx-scale').addEventListener('change', (e) => commitGfx({ ...settings.graphics, render_scale: e.target.value / 100 }));
+  for (const cat of Object.keys(CATEGORIES)) {
+    $('gfx-' + cat).addEventListener('change', (e) => {
+      const next = { ...settings.graphics };
+      if (e.target.value === 'preset') delete next[cat]; else next[cat] = e.target.value;
+      commitGfx(next);
+    });
+  }
+  $('gfx-adaptive').addEventListener('change', (e) => commitGfx({ ...settings.graphics, adaptive: e.target.checked }));
+  $('gfx-fps').addEventListener('change', (e) => commitGfx({ ...settings.graphics, show_fps: e.target.checked }));
+}
+
 /* ================= screens ================= */
+
+/** Decorative board mid-solve behind the title menu. */
+function showTitleBackdrop() {
+  if (!webglOk) return;
+  try {
+    const lvl = generateLevel('practice-medium');
+    const n = lvl.strands.length;
+    const state = {
+      strands: lvl.strands.map((s, i) => ({
+        ...s, done: false,
+        path: i < n - 1 ? lvl.solution[i].slice(0, Math.max(2, lvl.solution[i].length - 1)) : [s.anchor],
+      })),
+    };
+    render.showShowcase(lvl, state);
+  } catch { /* the backdrop is decoration only */ }
+}
 
 function showTitle() {
   session = null;
+  showTitleBackdrop();
   ui.showOnly('scr-title');
   $('hud').hidden = true; $('hint-bar').hidden = true; $('action-tray').hidden = true;
   $('title-progress').textContent = titleProgressText();
@@ -664,7 +802,7 @@ function boot() {
   updatePlayerLine();
   platform.init().then((result) => {
     if (!result.remoteLoaded) return;
-    settings = ui.loadSettings();
+    settings = migrateGraphics(ui.loadSettings());
     progress = ui.loadProgress();
     applySettings();
     if (!session) {

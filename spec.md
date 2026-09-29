@@ -153,6 +153,12 @@ Follow the skill pack's acceptance gate: deterministic seeds, debug views for co
 - Avoid runtime shader compilation during active play by prewarming required variants. Avoid per-frame allocations in simulation/render loops.
 - Quality tiers independently control shadows, environment detail, particles, post effects, antialiasing, and render scale; they never alter rules or visibility of hazards.
 
+### Graphics
+
+The worktable renders with ACES filmic tone mapping and sRGB output, a warm key lamp whose PCF shadow box is fitted to the board and its props, a cool rim light for strand silhouettes, and a hemisphere fill. Optional effects: key-light shadows; `RoomEnvironment` image-based lighting as `scene.environment` (reflections); GTAO contact darkening; bloom limited to highlights (threshold 0.88: the selected tip, over-bright reel sparks); a colour grade (gentle S-curve, slight saturation, warm highlights) with vignette; FXAA/SMAA/MSAA anti-aliasing. Surface detail swaps flat materials for procedural, deterministic canvas textures: wood-grain table and bevelled tiles, a felt pad with sheen and a running stitch around its edge, yarn strands with a twisted-ply bump and fibre sheen, glossy lacquered beads, turned bobbin spools with wound thread and a coloured label disc on top, and props (pinned needle cushion, brass thimble, ball of yarn) against a lamp-glow backdrop. Particles cover reel sparks (8 or 16) and, at the top tier, dust motes drifting in the lamp light. Ambient motion (lamp shimmer, selection-ring breathing, reeled-spool pulse, dust drift, and a slow camera drift on the title backdrop, where a decorative board mid-solve sits behind the menu) stops under reduced motion. Picking always uses the authored, unshaken camera.
+
+The Settings panel has **General** and **Graphics** tabs. Graphics offers Quality (Auto, chosen from the detected GPU — software renderers get Low, discrete GPUs and Apple M get High, others Balanced, capped at Balanced on touch devices; Low; Balanced; High; Ultra), a render scale slider (50–200% of the preset's), a per-effect select for shadows, ambient occlusion, bloom, colour grade, anti-aliasing, reflections, surface detail, particles and ambient motion (each "From preset (…)" by default; choosing a preset clears overrides), adaptive resolution (averages 90 frames; steps down 0.1 to a 0.6 floor when frames exceed 26 ms, back up 0.05 below 14 ms), a frame-rate readout (bottom-left, non-interactive) and a summary line "GPU · cost · W×H px". Pixel ratio is min(device ratio, preset cap: Low 1, Balanced 1.5, High/Ultra 2) × scale × adaptive scale. Low matches the original baseline (no shadows, no post chain, flat materials). Changes apply live and are stored as `graphics` in the checksummed, cloud-mirrored settings document (a legacy 0/1/2 quality is migrated once). The effect composer runs only when a post effect is enabled; if it cannot be built the game renders directly and the Graphics tab says so. Graphics strings are localized (en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT) from the browser language. `body[data-gfx-preset]` reflects the resolved preset.
+
 ## 5. Technical architecture
 
 ### Client modules
@@ -161,6 +167,7 @@ Follow the skill pack's acceptance gate: deterministic seeds, debug views for co
 - `rules`: pure deterministic state transitions, legality, scoring, seeded random stream.
 - `session`: local or hosted commands, snapshots, prediction policy, reconnect, replay.
 - `render`: Three.js scene graph, semantic entity views, camera, lighting, VFX, quality.
+- `gfx` (src/gfx.js): pure graphics quality model — presets, per-category overrides, GPU detection, `resolve()`, `describe()`; `src/gfx-i18n.js` holds the Graphics tab strings. Post-processing, environment and geometry addons are vendored from the same three.js release (r185) under `vendor/addons/` and mapped as `three/addons/`.
 - `ui`: responsive DOM shell, focus, localization, settings, overlays, accessibility mirror.
 - `audio`: buses, event mapping, focus/background behavior, decode and memory policy.
 - `content`: versioned levels, themes, tutorials, validation metadata.

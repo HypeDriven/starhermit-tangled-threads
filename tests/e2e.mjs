@@ -163,6 +163,54 @@ async function startPractice(page, levelId) {
   await waitPlayActive(page);
 }
 
+// Graphics tab through the visible UI: preset switches (Low, Ultra, High), one
+// per-effect override, live application (data-gfx-preset on <body>) and
+// persistence across a reload. Ends back on Auto so the round runs at the
+// detected (software GPU → Low) tier.
+async function openGraphics(page) {
+  await page.click('#btn-title-settings');
+  await page.waitForFunction(() => !document.getElementById('scr-pause').hidden);
+  await page.click('#tab-graphics');
+  await page.waitForFunction(() => !document.getElementById('gfx-block').hidden);
+}
+const bodyPreset = (page) => page.evaluate(() => document.body.dataset.gfxPreset);
+
+async function graphicsFlow(page, name) {
+  await openGraphics(page);
+  const autoLabel = await page.locator('#sel-quality option[value="auto"]').textContent();
+  if (!/\(.+\)/.test(autoLabel)) throw new Error(`auto option lacks detected tier: "${autoLabel}"`);
+  for (const p of ['low', 'ultra', 'high']) {
+    await page.selectOption('#sel-quality', p);
+    await page.waitForFunction((want) => document.body.dataset.gfxPreset === want, p);
+    await page.waitForTimeout(400); // let a few frames render with the new chain
+  }
+  const fromPreset = await page.locator('#gfx-bloom option[value="preset"]').textContent();
+  if (!/On/.test(fromPreset)) throw new Error(`bloom "From preset" label wrong at High: "${fromPreset}"`);
+  await page.selectOption('#gfx-bloom', 'off');
+  const summary = (await page.textContent('#gfx-summary')).trim();
+  if (/bloom/.test(summary)) throw new Error(`summary still lists bloom after override: "${summary}"`);
+  if (!/px/.test(summary)) throw new Error(`summary lacks WxH px: "${summary}"`);
+  const box = await page.locator('#gfx-block').boundingBox();
+  const vw = page.viewportSize().width;
+  if (!box || box.x < 0 || box.x + box.width > vw + 1) throw new Error(`graphics panel overflows viewport: ${JSON.stringify(box)}`);
+  ok(`${name}: graphics presets Low/Ultra/High apply live; bloom override applied ("${summary}")`);
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#scr-title:not([hidden])', { timeout: 15000 });
+  if (await bodyPreset(page) !== 'high') throw new Error(`preset not restored after reload: ${await bodyPreset(page)}`);
+  await openGraphics(page);
+  const q = await page.inputValue('#sel-quality');
+  const b = await page.inputValue('#gfx-bloom');
+  if (q !== 'high' || b !== 'off') throw new Error(`graphics settings not persisted: quality=${q} bloom=${b}`);
+  // Back to Auto: choosing a preset clears the override.
+  await page.selectOption('#sel-quality', 'auto');
+  if (await page.inputValue('#gfx-bloom') !== 'preset') throw new Error('choosing a preset did not clear the bloom override');
+  await page.click('#tab-general');
+  await page.click('#btn-resume');
+  await page.waitForFunction(() => document.getElementById('scr-pause').hidden);
+  ok(`${name}: graphics settings survive reload; preset choice clears overrides`);
+}
+
 // ---------- one full pass ----------
 async function runPass(browser, name, ctxOpts, { full, tap }) {
   const errors = [];
@@ -170,7 +218,7 @@ async function runPass(browser, name, ctxOpts, { full, tap }) {
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() !== 'error' || browserNoise.test(m.text())) return;
+    if (!['error', 'warning'].includes(m.type()) || browserNoise.test(m.text())) return;
     const url = m.location()?.url || '';
     if (/Failed to load resource|net::ERR/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
     errors.push(`console: ${m.text()}`);
@@ -204,6 +252,8 @@ async function runPass(browser, name, ctxOpts, { full, tap }) {
     await page.click('#btn-resume');
     await page.waitForFunction(() => document.getElementById('scr-pause').hidden);
     ok(`${name}: settings screen opens (Back) and closes`);
+
+    await graphicsFlow(page, name);
 
     // mode select → Practice → practice-easy
     const levelId = 'practice-easy';

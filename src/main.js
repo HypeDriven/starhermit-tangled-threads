@@ -3,13 +3,14 @@
 
 import { checkAction } from './rules.js';
 import {
-  generateLevel, validateLevel, STAGE_COUNT, TUTORIAL_STEPS, ACHIEVEMENTS, stageId, dailySeedString, isValidLevelId,
+  generateLevel, validateLevel, STAGE_COUNT, TUTORIAL_STEPS, ACHIEVEMENTS, stageId, dailySeedString,
 } from './content.js';
 import { Session } from './session.js';
 import * as render from './render.js';
 import * as audio from './audio.js';
 import * as ui from './ui.js';
-import { platform } from './platform.js';
+import { platform, DEFAULT_BINDINGS } from './platform.js';
+import { shText } from './sh-i18n.js';
 import { PRESETS, CATEGORIES, presetTier, choosePreset } from './gfx.js';
 import { gfxStrings } from './gfx-i18n.js';
 
@@ -28,7 +29,7 @@ let dragState = null;
 
 /* ================= persistence (localStorage cache + cloud mirror) ================= */
 
-function saveSettingsDoc(s) { ui.saveSettings(s); platform.queueCloudSave(); }
+function saveSettingsDoc(s) { ui.saveSettings(s); platform.queueCloudSave(); platform.pushSettings(s); }
 function saveProgressDoc(p) { ui.saveProgress(p); platform.queueCloudSave(); }
 
 /* ================= platform identity / sync status ================= */
@@ -47,7 +48,43 @@ function titleProgressText() {
     : 'A cozy routing puzzle on a fiber-art worktable.';
 }
 
+/* Effective keyboard bindings (action -> KeyboardEvent.code[]). */
+let bindings = Object.fromEntries(Object.entries(DEFAULT_BINDINGS).map(([k, v]) => [k, v.slice()]));
+const isKey = (action, e) => (bindings[action] || []).includes(e.code);
+function keyLabel(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  return { Escape: 'Esc', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' }[code] || code;
+}
+function renderKeyHelp() {
+  const el = $('help-keys');
+  if (!el) return;
+  const k = (a) => (bindings[a] || []).map((c) => '<kbd>' + keyLabel(c) + '</kbd>').join('/') || '—';
+  el.innerHTML = '<strong>Keyboard.</strong> <kbd>Tab</kbd>/' + k('left') + k('right') + k('up') + k('down') +
+    ' move among cells · ' + k('select') + ' select or extend · ' + k('reel') + ' reel · ' + k('undo') + ' undo · ' +
+    k('hint') + ' hint · ' + k('pause') + ' pause · ' + k('camera') + ' reset camera.';
+}
+
+let toastTimer = 0;
+function toast(msg, ms = 2600) {
+  const el = $('sh-toast');
+  el.textContent = msg;
+  el.hidden = false;
+  ui.announce(msg);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+}
+
+async function copyInvite() {
+  const url = platform.inviteLink();
+  if (!url) return;
+  try { await navigator.clipboard.writeText(url); toast(shText('copied')); }
+  catch { toast(shText('copyFail', { url }), 6000); }
+}
+
 function updatePlayerLine() {
+  $('btn-signin').hidden = !platform.canSignIn();
+  $('btn-invite').hidden = !platform.inviteLink();
   const el = $('player-line');
   if (!el) return;
   if (!platform.hosted) { el.hidden = true; return; }
@@ -296,20 +333,9 @@ function selectMode(mode) {
 
 /* ================= session lifecycle ================= */
 
-// The daily seed is derivable from the platform clock alone; when the game's
-// own backend is present its daily record wins (excluded days are marked).
+// The daily seed is derived from the device clock alone.
 async function startDaily() {
-  let seed = dailySeedString(platform.serverNow());
-  const info = await platform.fetchDailyInfo();
-  if (info.ok && typeof info.seed === 'string' && isValidLevelId(info.seed) && info.seed.startsWith('daily-')) {
-    seed = info.seed;
-  }
-  startLevel(seed);
-  if (info.ok && info.excluded && session && session.level.id === seed) {
-    session.ranked = false;
-    $('hint-bar').hidden = false;
-    $('hint-text').textContent = "Today's puzzle is marked excluded from ranking — play is unranked.";
-  }
+  startLevel(dailySeedString(platform.serverNow()));
 }
 
 function startLevel(levelId) {
@@ -392,13 +418,11 @@ function finishRound() {
   $('results-achievements').textContent = unlocked.length
     ? 'Achievement unlocked: ' + unlocked.map((k) => ACHIEVEMENTS.find((a) => a.key === k)?.name || k).join(', ')
     : '';
-  if (unlocked.length) platform.postAchievements(unlocked);
 
-  // Ranked comparison: the own server re-validates the replay envelope when it
-  // is present; hosted play reads the platform leaderboard (read-only).
+  // Ranked comparison: hosted play reads the platform leaderboard (read-only).
   $('results-compare').textContent = '';
   if (session.ranked && t.reason === 'complete') {
-    platform.compareResult(session.replayEnvelope(), progress.bestScores[session.level.id])
+    platform.compareResult(progress.bestScores[session.level.id])
       .then((line) => { $('results-compare').textContent = line; });
   }
   if (t.reason === 'complete') { audio.sfx.complete(); } else { audio.sfx.fail(); }
@@ -692,24 +716,22 @@ function moveCursor(dc, dr) {
 }
 
 function onKeyDown(e) {
-  if (e.key === 'Escape') {
+  if (isKey('pause', e)) {
     if (!$('scr-help').hidden) { $('btn-help-close').click(); return; }
     if (!$('scr-pause').hidden) { $('btn-resume').click(); return; }
     if (session && session.phase === 'active') pauseGame('esc');
     return;
   }
   if (!session || session.phase !== 'active') return;
-  switch (e.key) {
-    case 'ArrowLeft': e.preventDefault(); moveCursor(-1, 0); break;
-    case 'ArrowRight': e.preventDefault(); moveCursor(1, 0); break;
-    case 'ArrowUp': e.preventDefault(); moveCursor(0, -1); break;
-    case 'ArrowDown': e.preventDefault(); moveCursor(0, 1); break;
-    case 'Enter': case ' ': e.preventDefault(); onMirrorCell(cursorCell); break;
-    case 'r': case 'R': if (selection >= 0) tryReel(selection); else explain('not-at-spool'); break;
-    case 'u': case 'U': doUndo(); break;
-    case 'h': case 'H': doHint(); break;
-    case 'c': case 'C': render.resize(); ui.announce('Camera reset.'); break;
-  }
+  if (isKey('left', e)) { e.preventDefault(); moveCursor(-1, 0); }
+  else if (isKey('right', e)) { e.preventDefault(); moveCursor(1, 0); }
+  else if (isKey('up', e)) { e.preventDefault(); moveCursor(0, -1); }
+  else if (isKey('down', e)) { e.preventDefault(); moveCursor(0, 1); }
+  else if (isKey('select', e)) { e.preventDefault(); onMirrorCell(cursorCell); }
+  else if (isKey('reel', e)) { if (selection >= 0) tryReel(selection); else explain('not-at-spool'); }
+  else if (isKey('undo', e)) doUndo();
+  else if (isKey('hint', e)) doHint();
+  else if (isKey('camera', e)) { render.resize(); ui.announce('Camera reset.'); }
 }
 
 /* ================= lifecycle ================= */
@@ -751,6 +773,10 @@ function boot() {
 
   // Buttons.
   $('btn-play').addEventListener('click', () => { audio.startAudio(); audio.sfx.uiClick(); showModes(); });
+  $('btn-signin').textContent = shText('signIn');
+  $('btn-invite').textContent = shText('invite');
+  $('btn-signin').addEventListener('click', () => platform.signIn());
+  $('btn-invite').addEventListener('click', copyInvite);
   $('btn-title-help').addEventListener('click', () => { ui.showOnly('scr-help'); $('btn-help-close').focus(); });
   $('btn-title-settings').addEventListener('click', () => { ui.showOnly('scr-pause'); $('btn-leave').hidden = true; $('btn-restart').hidden = true; $('btn-resume').textContent = 'Back'; $('btn-resume').focus(); });
   document.querySelectorAll('.mode-card[data-mode]').forEach((b) => b.addEventListener('click', () => { audio.sfx.uiClick(); selectMode(b.dataset.mode); }));
@@ -799,8 +825,13 @@ function boot() {
   // offline-tolerant. A remote save wins over the local cache.
   platform.onIdentity = updatePlayerLine;
   platform.onSync = updatePlayerLine;
+  platform.onAuth = (a) => { if (!a.signedIn) toast(shText('signedOut'), 4000); updatePlayerLine(); };
   updatePlayerLine();
-  platform.init().then((result) => {
+  renderKeyHelp();
+  platform.init().then(async (result) => {
+    bindings = await platform.loadBindings();
+    renderKeyHelp();
+    updatePlayerLine();
     if (!result.remoteLoaded) return;
     settings = migrateGraphics(ui.loadSettings());
     progress = ui.loadProgress();

@@ -20,18 +20,9 @@
  * through the game's own pointer/mirror → handleCell/handleSpool path.
  * No game code is modified and no move is performed by the test.
  *
- * Serving: the repo ships `server.js` (the StarHermit authoritative
- * script declared by starhermit.txt) but the game is fully playable
- * offline — every screen and the whole round loop is local, and the
- * platform adapter degrades cleanly when `/api/*` is unreachable
- * (`syncServerTime` leaves the offset at 0, which keeps `serverNow()`
- * valid for the results screen). So, per the conventions of the sibling
- * titles (picture-logic/blockstead/balance-spire), this test embeds a
- * minimal node:http static server on an ephemeral port and answers
- * `/api/v1/time` with a real epoch so the results screen (which formats
- * `serverNow().toISOString()`) stays crash-free, and every other `/api/*`
- * probe with 200 `{}`. If the build ever truly requires the backend this
- * can be swapped for spawning `server.js`; today it is not needed.
+ * Serving: this test embeds a minimal node:http static server on an
+ * ephemeral port (unknown paths 404). Standalone (no launch token) the game
+ * must make zero same-origin /api or /ws requests; each pass asserts that.
  *
  * Run: npm run test:e2e  (or: node tests/e2e.mjs)
  */
@@ -68,18 +59,6 @@ const MIME = {
 const server = http.createServer(async (req, res) => {
   try {
     const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    // No StarHermit backend here. Give /api/v1/time a real epoch so the
-    // results screen (serverNow().toISOString()) stays valid; answer every
-    // other /api probe with empty JSON (200) so the platform adapter
-    // degrades to its documented offline path with zero console noise.
-    if (p.startsWith('/api/')) {
-      const body = p === '/api/v1/time'
-        ? JSON.stringify({ epochMs: Date.now() })
-        : '{}';
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(body);
-      return;
-    }
     const pathname = p === '/' ? '/index.html' : p;
     const file = path.normalize(path.join(ROOT, pathname));
     if (!file.startsWith(ROOT)) { res.writeHead(403).end('forbidden'); return; }
@@ -216,16 +195,21 @@ async function runPass(browser, name, ctxOpts, { full, tap }) {
   const errors = [];
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
+  const ownServerCalls = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.origin === BASE && /^\/(api|ws)(\/|$)/.test(u.pathname)) ownServerCalls.push(u.pathname);
+  });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (!['error', 'warning'].includes(m.type()) || browserNoise.test(m.text())) return;
     const url = m.location()?.url || '';
-    if (/Failed to load resource|net::ERR/.test(m.text()) && /\/api\/|\/favicon/.test(url)) return;
+    if (/Failed to load resource|net::ERR/.test(m.text()) && /\/favicon/.test(url)) return;
     errors.push(`console: ${m.text()}`);
   });
   page.on('response', (r) => {
     const u = r.url();
-    if (r.status() >= 400 && !/\/api\/|\/favicon/.test(u)) errors.push(`http ${r.status()}: ${u}`);
+    if (r.status() >= 400 && !/\/favicon/.test(u)) errors.push(`http ${r.status()}: ${u}`);
   });
 
   try {
@@ -348,6 +332,8 @@ async function runPass(browser, name, ctxOpts, { full, tap }) {
 
   if (errors.length) throw new Error(`${name} pass had page errors:\n  ${errors.join('\n  ')}`);
   console.log(`ok - ${name}: no page errors`);
+  if (ownServerCalls.length) throw new Error(`${name} pass made standalone own-server requests: ${ownServerCalls.join(', ')}`);
+  console.log(`ok - ${name}: zero same-origin /api or /ws requests`);
 }
 
 // ---------- main ----------

@@ -109,6 +109,9 @@
 
   kbd { background: #555; border-radius: .3rem; padding: .05rem .4rem; font-size: .85em; }
 
+  #sh-toast { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    z-index: 60; max-width: min(92vw, 34rem); padding: .6rem 1.1rem; border-radius: .8rem; text-align: center;
+    background: var(--panel); border: 1px solid var(--accent); color: var(--text); overflow-wrap: anywhere; }
   #sr-announcer, #sr-errors { position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -158,6 +161,7 @@
   }
 </style>
 <script src="browser-guard.js"></script>
+<script src="starhermit-sdk.js"></script>
 </head>
 <body>
 <canvas id="game-canvas" aria-label="Tangled Threads playfield" role="img"></canvas>
@@ -185,6 +189,8 @@
     <button type="button" id="btn-play" class="ui-btn">Play</button>
     <button type="button" id="btn-title-help" class="ui-btn ghost">Help</button>
     <button type="button" id="btn-title-settings" class="ui-btn ghost">Settings</button>
+    <button type="button" id="btn-signin" class="ui-btn ghost" hidden>Sign in with StarHermit</button>
+    <button type="button" id="btn-invite" class="ui-btn ghost" hidden>Invite a friend</button>
   </div>
   <p id="title-progress" class="tagline" aria-live="polite"></p>
   <p id="player-line" class="tagline" hidden></p>
@@ -281,7 +287,7 @@
     <div class="rule-card"><strong>Routing.</strong> Tap a strand to select it, then tap or drag through empty neighboring cells to extend it. Tap the cell behind the tip (or press <kbd>U</kbd>) to pull back.</div>
     <div class="rule-card"><strong>Reeling.</strong> When the tip rests on its matching spool, tap the spool or press <kbd>R</kbd> to reel the strand in. Reel all strands to finish the board.</div>
     <div class="rule-card"><strong>Scoring.</strong> Completion (up to 1000) + efficiency vs par (up to 500) + hint independence (up to 200) + discipline (up to 100). Fewer moves and zero hints score higher.</div>
-    <div class="rule-card"><strong>Keyboard.</strong> <kbd>Tab</kbd>/<kbd>←→↑↓</kbd> move among cells · <kbd>Enter</kbd>/<kbd>Space</kbd> select or extend · <kbd>R</kbd> reel · <kbd>U</kbd> undo · <kbd>H</kbd> hint · <kbd>Esc</kbd> pause · <kbd>C</kbd> reset camera.</div>
+    <div class="rule-card" id="help-keys"><strong>Keyboard.</strong> <kbd>Tab</kbd>/<kbd>←→↑↓</kbd> move among cells · <kbd>Enter</kbd>/<kbd>Space</kbd> select or extend · <kbd>R</kbd> reel · <kbd>U</kbd> undo · <kbd>H</kbd> hint · <kbd>Esc</kbd> pause · <kbd>C</kbd> reset camera.</div>
     <div class="btnrow" style="margin-top:1rem"><button type="button" id="btn-help-close" class="ui-btn">Close</button></div>
   </div>
 </div>
@@ -300,6 +306,7 @@
 </div>
 
 <div id="sr-announcer" aria-live="polite"></div>
+<div id="sh-toast" role="status" hidden></div>
 <div id="sr-errors" aria-live="assertive"></div>
 
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }</script>

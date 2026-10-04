@@ -1,167 +1,45 @@
-// Tangled Threads — StarHermit platform adapter (hosted API, offline-tolerant).
-// Hosted mode activates iff a launch token was read from the URL fragment;
-// every REST call then sends Authorization: Bearer and the token is re-minted
-// every 45 min. The game's own server.js (local dev backend) keeps its
-// replay-validated score/daily/achievement routes; on the hosted platform the
-// leaderboard is read-only and progress mirrors to the platform cloud slot.
+// Tangled Threads — StarHermit platform adapter over window.StarHermit
+// (starhermit-sdk.js): launch token + renewal, sign-in, nickname, the
+// game:<slug> cloud-save slot, settings KV, controls, invite link and the
+// read-only platform board. The client never calls the game's own server.js
+// routes: standalone play (any host, loopback included) makes no network
+// calls and uses the device clock.
 // localStorage is always the offline cache: any failure falls back to local
 // play with no console noise.
 
 import { loadSettings, saveSettings, loadProgress, saveProgress, checksum } from './ui.js';
 
-const PROBE_TIMEOUT_MS = 2000;
-const REQUEST_TIMEOUT_MS = 8000;
-const REFRESH_INTERVAL_MS = 45 * 60 * 1000; // token lives 60 min — renew ahead of expiry
-const REFRESH_RETRY_MS = 60 * 1000;
 const CLOUD_DEBOUNCE_MS = 2000;
+const SETTINGS_PUSH_MS = 800;
 const BOARD_PAGE_SIZE = 10;
-const CLOUD_ENTRY_NAME = 'save.json';
-const BACKEND_MARKER = 'tangled-threads'; // own server.js stamps /api/v1/time
 
-/* ---------------- launch token: fragment #game_token=<jwt>, read once ---------------- */
+/** Preferences mirrored to the platform settings KV. */
+export const PREF_KEYS = ['volumes', 'graphics', 'reducedMotion', 'highContrast', 'cvdPalette',
+  'largeText', 'leftHanded', 'haptics', 'tutorialDone'];
+/** Keyboard actions (KeyboardEvent.code) — mirrors control.* in starhermit.txt. */
+export const DEFAULT_BINDINGS = {
+  left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'],
+  select: ['Enter', 'Space'], reel: ['KeyR'], undo: ['KeyU'], hint: ['KeyH'],
+  pause: ['Escape'], camera: ['KeyC'],
+};
 
-function readLaunchToken() {
-  if (typeof window === 'undefined' || !window.location) return null;
-  const { location } = window;
-  if (location.hash) {
-    const params = new URLSearchParams(location.hash.slice(1));
-    const token = params.get('game_token');
-    if (token) {
-      // Strip only the token, preserving any other fragment params.
-      params.delete('game_token');
-      const rest = params.toString();
-      try {
-        history.replaceState(null, '', location.pathname + location.search + (rest ? '#' + rest : ''));
-      } catch { /* stripping is best-effort */ }
-      return token;
-    }
-  }
-  // Query-param fallbacks exist only for local dev.
-  const params = new URLSearchParams(location.search);
-  return params.get('game_token') || params.get('token') || params.get('launch') || params.get('launch_token');
-}
-
-// base64url-decode the payload; signature verification is the platform's job.
-function decodeJwtPayload(token) {
-  const parts = String(token).split('.');
-  if (parts.length !== 3) return null;
-  try {
-    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
-    const claims = JSON.parse(json);
-    return claims && typeof claims === 'object' ? claims : null;
-  } catch {
-    return null;
-  }
-}
-
-/* ---------------- minimal ZIP writer/reader (stored entries only) ---------------- */
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-export function crc32(bytes) {
-  let c = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-export function zipStore(name, dataBytes) {
-  const enc = new TextEncoder();
-  const nameB = enc.encode(name);
-  const crc = crc32(dataBytes);
-  const out = [];
-  const u16 = (v) => out.push(v & 0xff, (v >> 8) & 0xff);
-  const u32 = (v) => out.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  u32(0x04034b50); u16(20); u16(0); u16(0); u16(0); u16(0);
-  u32(crc); u32(dataBytes.length); u32(dataBytes.length);
-  u16(nameB.length); u16(0);
-  const head = new Uint8Array(out);
-  const cd = [];
-  const c16 = (v) => cd.push(v & 0xff, (v >> 8) & 0xff);
-  const c32 = (v) => cd.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  c32(0x02014b50); c16(20); c16(20); c16(0); c16(0); c16(0); c16(0);
-  c32(crc); c32(dataBytes.length); c32(dataBytes.length);
-  c16(nameB.length); c16(0); c16(0); c16(0); c16(0); c32(0); c32(0); // attrs + local-header offset
-  const cdHead = new Uint8Array(cd);
-  const cdOff = head.length + nameB.length + dataBytes.length;
-  const parts = [head, nameB, dataBytes, cdHead, nameB];
-  const eocd = [];
-  const e32 = (v) => eocd.push(v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-  const e16 = (v) => eocd.push(v & 0xff, (v >> 8) & 0xff);
-  e32(0x06054b50); e16(0); e16(0); e16(1); e16(1);
-  e32(cdHead.length + nameB.length); e32(cdOff); e16(0);
-  parts.push(new Uint8Array(eocd));
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const buf = new Uint8Array(total);
-  let o = 0;
-  for (const p of parts) { buf.set(p, o); o += p.length; }
-  return buf;
-}
-
-export function unzipFirstEntry(zipBytes) {
-  // Stored single-entry reader: scan local headers for compression 0.
-  const dv = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
-  let off = 0;
-  while (off + 30 <= zipBytes.length && dv.getUint32(off, true) === 0x04034b50) {
-    const method = dv.getUint16(off + 8, true);
-    const size = dv.getUint32(off + 18, true);
-    const nameLen = dv.getUint16(off + 26, true);
-    const extraLen = dv.getUint16(off + 28, true);
-    const dataOff = off + 30 + nameLen + extraLen;
-    if (method !== 0) throw new Error('unsupported zip entry');
-    return zipBytes.slice(dataOff, dataOff + size);
-  }
-  throw new Error('bad zip');
-}
-
-export function bytesToBase64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
-export function base64ToBytes(b64) {
-  const s = atob(b64);
-  const b = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
-  return b;
-}
+const SH = (typeof globalThis !== 'undefined' && globalThis.StarHermit) || null;
+if (SH) SH.init();
 
 /* ---------------- adapter state ---------------- */
 
-let token = readLaunchToken();
-let claims = token ? decodeJwtPayload(token) : null;
-let sub = claims && typeof claims.sub === 'string' ? claims.sub : null;
-let slug = claims && typeof claims.game_scope === 'string' ? claims.game_scope : null;
-const hosted = !!(token && sub && slug);
-if (!hosted) { token = null; claims = null; sub = null; slug = null; }
-
-let backend = false;       // the game's own server.js answered (local dev)
-let timeOffsetMs = 0;      // serverNow - clientNow, round-trip adjusted
-let leaderboardId = null;  // platform leaderboard (read-only), when published
-let nickname = hosted ? 'Player ' + sub.slice(0, 8) : null;
-const profileCache = new Map(); // userId -> nickname
-let syncStatus = hosted ? 'synced' : 'local'; // local|synced|saving|offline|error
-let refreshTimer = null;
-let cloudTimer = null;
-let cloudDirty = false;
-let cloudReady = false;    // first cloud load attempted — flushes wait for it
-let lastCloudSig = null;
+const isHosted = () => !!(SH && SH.signedIn);
+let nickname = null;
+let syncStatus = isHosted() ? 'synced' : 'local'; // local|synced|saving|offline|error
 let onIdentity = null;   // ({nickname, hosted})
 let onSync = null;       // (status)
+let onAuth = null;       // ({signedIn})
+let pushedPrefs = {};
+let prefTimer = null;
 
 function emitIdentity() {
   if (typeof onIdentity === 'function') {
-    try { onIdentity({ nickname, hosted }); } catch { /* listener guard */ }
+    try { onIdentity({ nickname, hosted: isHosted() }); } catch { /* listener guard */ }
   }
 }
 
@@ -173,260 +51,141 @@ function setSync(status) {
   }
 }
 
-async function request(path, { method = 'GET', body, timeout = REQUEST_TIMEOUT_MS, binary = false, keepalive = false } = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const headers = {};
-    if (body) headers['content-type'] = 'application/json';
-    if (token) headers.authorization = 'Bearer ' + token;
-    const res = await fetch(path, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: ctrl.signal,
-      keepalive,
-      credentials: 'same-origin',
-    });
-    if (binary) {
-      if (res.status === 404) throw Object.assign(new Error('not-found'), { notFound: true });
-      if (!res.ok) throw new Error('http-' + res.status);
-      return new Uint8Array(await res.arrayBuffer());
-    }
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error((data && data.error) || 'http-' + res.status);
-    return data;
-  } finally {
-    clearTimeout(timer);
-  }
+if (SH) {
+  SH.on('saved', (ok) => setSync(ok ? 'synced' : 'offline'));
+  SH.on('auth', (a) => {
+    if (!a.signedIn) { nickname = null; setSync('local'); }
+    if (typeof onAuth === 'function') { try { onAuth(a); } catch { /* listener guard */ } }
+    emitIdentity();
+  });
 }
 
 /* ---------------- identity ---------------- */
-// Nickname via the profile route — never /api/v1/me (403 for launch tokens),
-// never usernames. Fallback: "Player " + id8.
+// Profile nickname (fallback "Player <id>") — never /api/v1/me, never usernames.
 
 async function fetchProfile(userId) {
-  if (profileCache.has(userId)) return profileCache.get(userId);
-  let name = null;
-  if (hosted) {
-    try {
-      const p = await request(`/api/v1/users/${encodeURIComponent(userId)}/profile`, { timeout: PROBE_TIMEOUT_MS });
-      if (p && typeof p.nickname === 'string' && p.nickname.trim()) {
-        name = p.nickname.trim().slice(0, 24);
-      }
-    } catch { /* keep fallback */ }
-  }
-  if (!name) name = 'Player ' + String(userId).slice(0, 8);
-  profileCache.set(userId, name);
-  return name;
-}
-
-/* ---------------- token refresh ---------------- */
-// Scoped launch tokens re-mint against the game record; failures retry ~60 s.
-
-function scheduleRefresh(ms) {
-  clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(refreshToken, ms);
-}
-
-async function refreshToken() {
-  if (!hosted) return;
-  try {
-    const data = await request(`/api/v1/games/${encodeURIComponent(slug)}/launch-token`, { method: 'POST', body: {} });
-    if (data && typeof data.token === 'string' && data.token) {
-      token = data.token;
-      scheduleRefresh(REFRESH_INTERVAL_MS);
-      return;
-    }
-    throw new Error('no-token');
-  } catch {
-    scheduleRefresh(REFRESH_RETRY_MS);
-  }
+  const p = SH ? await SH.profile(userId) : null;
+  return p ? String(p.displayName).slice(0, 24) : 'Player ' + String(userId).slice(0, 6);
 }
 
 /* ---------------- cloud save ---------------- */
-// ONE slot: {settings, progress} as a stored zip + base64. Remote wins on
-// conflict; localStorage stays the offline cache underneath.
+// ONE slot (game:<slug>): {v, data:{settings, progress}, check}. Remote wins
+// on start; localStorage stays the offline cache underneath.
 
 function cloudData() {
   return { settings: loadSettings(), progress: loadProgress() };
 }
 
-function cloudSig() {
-  try { return checksum(cloudData()); } catch { return null; }
-}
-
 function queueCloudSave() {
-  if (!hosted) return; // offline: localStorage is the only store
-  cloudDirty = true;
+  if (!isHosted()) return; // offline: localStorage is the only store
   setSync('saving');
-  clearTimeout(cloudTimer);
-  cloudTimer = setTimeout(flushCloudSave, CLOUD_DEBOUNCE_MS);
-}
-
-async function flushCloudSave() {
-  clearTimeout(cloudTimer);
-  if (!hosted || !cloudDirty || !cloudReady) return;
-  const sig = cloudSig();
-  if (sig != null && sig === lastCloudSig) {
-    cloudDirty = false;
-    setSync('synced');
-    return;
-  }
-  try {
-    const bytes = new TextEncoder().encode(JSON.stringify(cloudData()));
-    await request(`/api/v1/me/cloud-saves/${encodeURIComponent(slug)}`, {
-      method: 'PUT',
-      body: { dataBase64: bytesToBase64(zipStore(CLOUD_ENTRY_NAME, bytes)) },
-      keepalive: true,
-    });
-    lastCloudSig = sig;
-    cloudDirty = false;
-    setSync('synced');
-  } catch {
-    setSync('offline'); // retried on the next change or pagehide
-  }
+  const data = cloudData();
+  SH.saveJSON({ v: 1, data, check: checksum(data) }, CLOUD_DEBOUNCE_MS);
 }
 
 // Returns true when a remote doc was adopted into the local cache.
 async function loadCloudSave() {
-  cloudReady = true;
-  if (!hosted) return false;
-  try {
-    const bytes = await request(`/api/v1/me/cloud-saves/${encodeURIComponent(slug)}`, { binary: true });
-    const doc = JSON.parse(new TextDecoder().decode(unzipFirstEntry(bytes)));
-    if (!doc || typeof doc !== 'object' || !doc.data || doc.check !== checksum(doc.data)) return false;
-    saveSettings(doc.data.settings);
-    saveProgress(doc.data.progress);
-    lastCloudSig = checksum(doc.data);
-    cloudDirty = false;
-    setSync('synced');
-    return true;
-  } catch {
-    // 404 = no save yet: seed the cloud slot from the local cache.
-    cloudDirty = true;
-    flushCloudSave();
+  if (!isHosted()) return false;
+  const doc = await SH.loadJSON();
+  if (!doc || typeof doc !== 'object' || !doc.data || doc.check !== checksum(doc.data)) {
+    queueCloudSave(); // no save yet: seed the cloud slot from the local cache
     return false;
   }
+  saveSettings(doc.data.settings);
+  saveProgress(doc.data.progress);
+  setSync('synced');
+  return true;
 }
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  const flush = () => { if (cloudDirty && cloudReady) flushCloudSave(); };
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && window.addEventListener) {
+  const flush = () => { if (isHosted()) SH.flushSave(true); };
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+}
+
+/* ---------------- settings KV + controls ---------------- */
+
+function pickPrefs(s) {
+  const out = {};
+  for (const k of PREF_KEYS) if (s && s[k] !== undefined) out[k] = s[k];
+  return out;
+}
+
+// Platform-stored preferences, adopted into the local settings (platform wins).
+async function loadPlatformSettings() {
+  if (!isHosted()) return false;
+  const remote = await SH.getSettings();
+  const local = loadSettings();
+  const patch = {};
+  for (const k of PREF_KEYS) if (remote && remote[k] != null) patch[k] = remote[k];
+  pushedPrefs = { ...pickPrefs(local), ...patch };
+  if (!Object.keys(patch).length) return false;
+  saveSettings({ ...local, ...patch });
+  return true;
+}
+
+/** Debounced PATCH of changed preference keys. */
+function pushSettings(s) {
+  if (!isHosted()) return;
+  clearTimeout(prefTimer);
+  prefTimer = setTimeout(() => {
+    const prefs = pickPrefs(s), diff = {};
+    for (const k of PREF_KEYS) {
+      if (JSON.stringify(prefs[k]) !== JSON.stringify(pushedPrefs[k])) diff[k] = prefs[k] ?? null;
+    }
+    if (!Object.keys(diff).length) return;
+    Object.assign(pushedPrefs, diff);
+    SH.patchSettings(diff);
+  }, SETTINGS_PUSH_MS);
+}
+
+/** Effective bindings; platform overrides win when signed in. */
+async function loadBindings() {
+  if (!isHosted()) return Object.fromEntries(Object.entries(DEFAULT_BINDINGS).map(([k, v]) => [k, v.slice()]));
+  return SH.loadBindings(DEFAULT_BINDINGS);
 }
 
 /* ---------------- init ---------------- */
 
 async function initPlatform() {
-  const result = { hosted, backend: false, remoteLoaded: false };
+  const result = { hosted: isHosted(), remoteLoaded: false };
 
-  // Clock/backend probe, local mode only: on the hosted platform the game's
-  // own routes do not exist, so nothing may fire there. The marker field
-  // tells the platform-shaped time response apart from our own server.js.
-  if (!hosted) {
-    try {
-      const t0 = Date.now();
-      const data = await request('/api/v1/time', { timeout: PROBE_TIMEOUT_MS });
-      const t1 = Date.now();
-      if (data && typeof data.epochMs === 'number') {
-        timeOffsetMs = data.epochMs - Math.round((t0 + t1) / 2);
-      }
-      backend = !!(data && data.server === BACKEND_MARKER);
-    } catch { backend = false; }
-  }
-  result.backend = backend;
-
-  if (hosted) {
-    scheduleRefresh(REFRESH_INTERVAL_MS);
-    fetchProfile(sub).then((name) => { nickname = name; emitIdentity(); });
-    // Platform game record: leaderboard id for the read-only board line.
-    try {
-      const g = await request(`/api/v1/games/${encodeURIComponent(slug)}`, { timeout: PROBE_TIMEOUT_MS });
-      if (g && (typeof g.leaderboardId === 'string' || typeof g.leaderboardId === 'number')) {
-        leaderboardId = String(g.leaderboardId);
-      }
-    } catch { /* local records only */ }
+  if (isHosted()) {
+    nickname = 'Player ' + String(SH.userId).slice(0, 6);
+    fetchProfile(SH.userId).then((name) => { nickname = name; emitIdentity(); });
     result.remoteLoaded = await loadCloudSave();
+    if (await loadPlatformSettings()) result.remoteLoaded = true;
   }
   return result;
 }
 
 /* ---------------- time ---------------- */
 
-export function serverNow() { return new Date(Date.now() + timeOffsetMs); }
-
-/* ---------------- daily (own-backend only) ---------------- */
-
-export async function fetchDailyInfo() {
-  if (!backend) return { ok: false };
-  try {
-    const res = await request('/api/v1/daily');
-    return { ok: true, ...res };
-  } catch { return { ok: false }; }
-}
-
-/* ---------------- achievements ---------------- */
-// Durable delivery exists only against the game's own server.js. On the
-// hosted platform achievements stay local inside the cloud-saved progress doc.
-
-export async function postAchievements(keys) {
-  if (!backend) return { ok: false };
-  try {
-    await request('/api/v1/achievements', { method: 'POST', body: { keys } });
-    return { ok: true };
-  } catch { return { ok: false }; }
-}
+export function serverNow() { return new Date(); }
 
 /* ---------------- leaderboards ---------------- */
 // Read-only per the platform contract: clients never submit scores to a
 // platform leaderboard. Personal bests live in progress and cloud-save with it.
 
 async function fetchPlatformBoard() {
-  if (!hosted || !leaderboardId) return null;
-  try {
-    const data = await request(
-      `/api/v1/leaderboards/${encodeURIComponent(leaderboardId)}/entries?page=1&pageSize=${BOARD_PAGE_SIZE}`,
-    );
-    const list = Array.isArray(data && data.entries) ? data.entries : [];
-    // Servers send rows best-first; sort defensively before labelling ranks.
-    const rows = list.map((e) => ({ e, score: Number(e && (e.score != null ? e.score : e.value)) }))
-      .sort((a, b) => (Number.isFinite(b.score) ? b.score : 0) - (Number.isFinite(a.score) ? a.score : 0));
-    return await Promise.all(rows.map(async ({ e, score }, i) => {
-      const userId = e && (e.userId ?? (e.user && e.user.id) ?? e.user_id ?? null);
-      let name = null;
-      if (userId != null) name = await fetchProfile(String(userId));
-      return { name, score: Number.isFinite(score) ? score : 0, rank: (e && e.rank) || i + 1, me: userId != null && userId === sub };
-    }));
-  } catch {
-    return null;
-  }
+  if (!isHosted()) return null;
+  const r = await SH.leaderboard(null, { pageSize: BOARD_PAGE_SIZE });
+  if (!r || !r.board) return null;
+  const rows = (r.items || []).map((e) => ({ e, score: Number(e && (e.score != null ? e.score : e.value)) }))
+    .sort((a, b) => (Number.isFinite(b.score) ? b.score : 0) - (Number.isFinite(a.score) ? a.score : 0));
+  return Promise.all(rows.map(async ({ e, score }, i) => ({
+    name: e.userId != null ? await fetchProfile(String(e.userId)) : null,
+    score: Number.isFinite(score) ? score : 0,
+    rank: e.rank || i + 1,
+    me: e.userId != null && e.userId === SH.userId,
+  })));
 }
 
 /* ---------------- ranked result line ---------------- */
-// Replay-validated submission exists only against the game's own server.js
-// (authenticated its-backend, graceful fallback). Hosted play reads the
-// platform leaderboard instead; anything else keeps the score local.
+// Hosted play reads the platform leaderboard; otherwise the score stays local.
 
-async function submitScore(envelope) {
-  if (!backend) return { ok: false, error: 'unavailable' };
-  try {
-    const body = await request('/api/v1/score', { method: 'POST', body: envelope });
-    return { ok: true, ...body };
-  } catch (e) {
-    const msg = (e && e.message) || 'submit-failed';
-    const offline = !!(e && (e.name === 'AbortError' || /fetch|network/i.test(msg)));
-    return { ok: false, error: offline ? 'offline' : msg };
-  }
-}
-
-export async function compareResult(envelope, localBest) {
-  if (backend) {
-    const r = await submitScore(envelope);
-    if (r.ok) return `Global rank #${r.rank} of ${r.entries} on this board.`;
-    return r.error === 'offline' ? 'Offline — score kept locally.' : `Score not ranked (${r.error}).`;
-  }
-  if (hosted) {
+export async function compareResult(localBest) {
+  if (isHosted()) {
     const board = await fetchPlatformBoard();
     if (board === null) {
       return 'Globally ranked boards are unavailable on this host — score kept locally.';
@@ -442,18 +201,23 @@ export async function compareResult(envelope, localBest) {
 /* ---------------- public surface ---------------- */
 
 export const platform = {
-  get hosted() { return hosted; },
-  get backend() { return backend; },
+  get hosted() { return isHosted(); },
   get nickname() { return nickname; },
   get syncStatus() { return syncStatus; },
   get onIdentity() { return onIdentity; },
   set onIdentity(cb) { onIdentity = cb; },
   get onSync() { return onSync; },
   set onSync(cb) { onSync = cb; },
+  get onAuth() { return onAuth; },
+  set onAuth(cb) { onAuth = cb; },
   init: initPlatform,
   serverNow,
   compareResult,
-  fetchDailyInfo,
-  postAchievements,
   queueCloudSave,
+  flushCloudSave: () => (isHosted() ? SH.flushSave(true) : Promise.resolve(false)),
+  pushSettings,
+  loadBindings,
+  canSignIn: () => !!(SH && SH.canSignIn()),
+  signIn: () => !!(SH && SH.signIn()),
+  inviteLink: () => (isHosted() ? SH.inviteLink() : null),
 };

@@ -444,7 +444,8 @@ function fmtTime(ms) {
 {
   const bar = $('hint-bar');
   const sync = () => {
-    const h = bar && !bar.hidden ? bar.getBoundingClientRect().height : 0;
+    // visual px → layout px of the (equally zoomed) action tray
+    const h = bar && !bar.hidden ? bar.getBoundingClientRect().height / ((window.UIScale && UIScale.value) || 1) : 0;
     document.documentElement.style.setProperty('--hint-h', `${Math.round(h)}px`);
   };
   if (bar) {

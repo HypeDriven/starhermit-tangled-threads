@@ -36,12 +36,12 @@
   body.webgl-3d #scr-title { background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(20,14,10,.78), rgba(20,14,10,.4)); }
   .screen.transparent > * { pointer-events: auto; }
 
-  h1.title { font-size: clamp(2rem, 7vw, 4rem); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
-  h2 { font-size: clamp(1.25rem, 3vw, 1.75rem); color: #ffe9c0; margin-bottom: .75rem; }
-  .tagline { font-size: clamp(.95rem, 2.4vw, 1.2rem); opacity: .9; max-width: 60ch; line-height: 1.5; }
+  h1.title { font-size: clamp(2rem, calc(7vw / var(--ui-scale, 1)), 4rem); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  h2 { font-size: clamp(1.25rem, calc(3vw / var(--ui-scale, 1)), 1.75rem); color: #ffe9c0; margin-bottom: .75rem; }
+  .tagline { font-size: clamp(.95rem, calc(2.4vw / var(--ui-scale, 1)), 1.2rem); opacity: .9; max-width: 60ch; line-height: 1.5; }
 
   .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 1rem;
-    padding: 1.25rem 1.5rem; max-width: min(94vw, 46rem); width: 100%; text-align: left; }
+    padding: 1.25rem 1.5rem; max-width: min(calc(94vw / var(--ui-scale, 1)), 46rem); width: 100%; text-align: left; }
   .panel.center { text-align: center; }
 
   .btnrow { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: center; }
@@ -52,6 +52,7 @@
   .ui-btn[disabled] { opacity: .45; cursor: not-allowed; }
   .ui-btn.small { font-size: .9rem; padding: .4rem 1rem; min-height: 44px; }
 
+  .screen > .mode-grid { max-width: 72rem; }
   .mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; width: 100%; }
   .mode-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: .9rem;
     padding: 1rem; text-align: left; color: var(--text); display: flex; flex-direction: column; gap: .35rem; }
@@ -63,7 +64,7 @@
   #hud { position: fixed; top: var(--safe-t); left: var(--safe-l); right: var(--safe-r); z-index: 10;
     display: flex; justify-content: center; gap: .5rem; padding: .5rem; pointer-events: none; flex-wrap: wrap; }
   #hud .pill, #hint-bar .pill { background: var(--pill); color: #ffe9c0; padding: .45rem 1rem; border-radius: 999px;
-    font-weight: 700; font-size: clamp(.85rem, 2.2vw, 1.05rem); pointer-events: auto; border: 1px solid var(--panel-border); }
+    font-weight: 700; font-size: clamp(.85rem, calc(2.2vw / var(--ui-scale, 1)), 1.05rem); pointer-events: auto; border: 1px solid var(--panel-border); }
   #hint-bar { position: fixed; bottom: calc(var(--safe-b) + .5rem); left: var(--safe-l); right: var(--safe-r);
     display: flex; justify-content: center; z-index: 10; pointer-events: none; padding: 0 .5rem; }
   #hint-bar .pill { max-width: 70ch; text-align: center; line-height: 1.4; }
@@ -110,7 +111,7 @@
   kbd { background: #555; border-radius: .3rem; padding: .05rem .4rem; font-size: .85em; }
 
   #sh-toast { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
-    z-index: 60; max-width: min(92vw, 34rem); padding: .6rem 1.1rem; border-radius: .8rem; text-align: center;
+    z-index: 60; max-width: min(calc(92vw / var(--ui-scale, 1)), 34rem); padding: .6rem 1.1rem; border-radius: .8rem; text-align: center;
     background: var(--panel); border: 1px solid var(--accent); color: var(--text); overflow-wrap: anywhere; }
   #sr-announcer, #sr-errors { position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; }
@@ -156,10 +157,15 @@
     #action-tray { bottom: calc(var(--safe-b) + .5rem); right: calc(var(--safe-r) + .5rem); left: auto; flex-direction: column; }
     #hint-bar { bottom: auto; top: calc(var(--safe-t) + 3rem); }
   }
+  /* Large screens: every DOM UI layer zooms by --ui-scale (ui-scale.js, 1 up to
+     1600x1000; vw/vh inside them are divided by it). The full-viewport 3D canvas
+     stays unzoomed. */
+  #hud, #hint-bar, #action-tray, .screen, #compat-msg, #sh-toast, #fps-meter { zoom: var(--ui-scale, 1); }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
 </style>
+<script src="ui-scale.js"></script>
 <script src="browser-guard.js"></script>
 <script src="starhermit-sdk.js"></script>
 </head>

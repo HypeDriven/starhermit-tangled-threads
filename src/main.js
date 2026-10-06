@@ -289,7 +289,7 @@ function showTitle() {
   ui.showOnly('scr-title');
   $('hud').hidden = true; $('hint-bar').hidden = true; $('action-tray').hidden = true;
   $('title-progress').textContent = titleProgressText();
-  $('btn-play').focus();
+  $('btn-play').focus({ preventScroll: true });
 }
 
 function showModes() {
@@ -376,7 +376,7 @@ function pauseGame(reason) {
   session.setPhase('paused', reason);
   ui.saveSnapshot(session.snapshot());
   ui.showOnly('scr-pause');
-  $('btn-resume').focus();
+  $('btn-resume').focus({ preventScroll: true });
   ui.announce('Paused.');
 }
 
@@ -435,7 +435,7 @@ function finishRound() {
   ui.announce($('results-h').textContent + ' Total score ' + score.total);
   ui.clearSnapshot();
   session.setPhase('progression', 'results-shown');
-  $('btn-next').focus();
+  $('btn-next').focus({ preventScroll: true });
 }
 
 /* ================= HUD / tutorial ================= */
@@ -784,8 +784,8 @@ function boot() {
   $('btn-invite').textContent = shText('invite');
   $('btn-signin').addEventListener('click', () => platform.signIn());
   $('btn-invite').addEventListener('click', copyInvite);
-  $('btn-title-help').addEventListener('click', () => { ui.showOnly('scr-help'); $('btn-help-close').focus(); });
-  $('btn-title-settings').addEventListener('click', () => { ui.showOnly('scr-pause'); $('btn-leave').hidden = true; $('btn-restart').hidden = true; $('btn-resume').textContent = 'Back'; $('btn-resume').focus(); });
+  $('btn-title-help').addEventListener('click', () => { ui.showOnly('scr-help'); $('btn-help-close').focus({ preventScroll: true }); });
+  $('btn-title-settings').addEventListener('click', () => { ui.showOnly('scr-pause'); $('btn-leave').hidden = true; $('btn-restart').hidden = true; $('btn-resume').textContent = 'Back'; $('btn-resume').focus({ preventScroll: true }); });
   document.querySelectorAll('.mode-card[data-mode]').forEach((b) => b.addEventListener('click', () => { audio.sfx.uiClick(); selectMode(b.dataset.mode); }));
   $('btn-mode-start').addEventListener('click', () => {
     if (pendingMode === 'learn') startLevel('tutorial');

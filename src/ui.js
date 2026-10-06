@@ -81,7 +81,12 @@ export function announceError(msg) { $('sr-errors').textContent = msg; }
 const SCREENS = ['scr-title', 'scr-modes', 'scr-pause', 'scr-results', 'scr-help', 'scr-board-mirror'];
 
 export function showOnly(...ids) {
-  for (const s of SCREENS) $(s).hidden = !ids.includes(s);
+  for (const s of SCREENS) {
+    const el = $(s), show = ids.includes(s);
+    // hidden screens keep their scroll: reopen at the top so the heading shows
+    if (show && el.hidden) { el.scrollTop = 0; for (const p of el.querySelectorAll('.panel')) p.scrollTop = 0; }
+    el.hidden = !show;
+  }
 }
 
 export function vibrate(settings, pattern = 12) {

@@ -313,8 +313,91 @@ export function resize() {
   camBase.set(0, dist * FRAMING.tilt * 2, dist * (1 - FRAMING.tilt * 0.4));
   camera.position.copy(camBase);
   camera.lookAt(camTarget);
+  camera.clearViewOffset();
+  camera.aspect = w / h; // clearViewOffset keeps it, setViewOffset would not
+  camera.updateMatrixWorld();
   camera.updateProjectionMatrix();
+  applyPlayFrame(w, h);
   size = [0, 0]; // re-apply drawing-buffer size on the next frame
+}
+
+/* ---------------- play framing ---------------- */
+
+let chromeFn = null;
+
+/**
+ * `fn()` returns the HUD elements over the canvas during play (null off the
+ * play screen). The board is framed into the canvas rect they leave free.
+ */
+export function setFramingChrome(fn) { chromeFn = fn; }
+
+/** Re-fit the board after the HUD appeared, vanished or changed size. */
+export function reframe() { resize(); }
+
+function ndcBounds(points) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  const v = new THREE.Vector3();
+  for (const p of points) {
+    v.copy(p).project(camera);
+    x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+  }
+  return { x0, x1, y0, y1 };
+}
+
+/**
+ * Lens shift + zoom (setViewOffset) over the authored camera: the board
+ * (frame + spools) fills the canvas left free by the HUD. Full-width bars
+ * and full-height rails are always kept clear; smaller corner pieces (the
+ * docked board mirror, a short action column) only when the board would end
+ * up beneath them. The authored position/angle and picking stay unchanged.
+ */
+function applyPlayFrame(W, H) {
+  const chrome = showcase ? null : chromeFn?.();
+  if (!chrome || !levelRef) return;
+  const hx = levelRef.cols * CELL * 0.5 + 0.45, hz = levelRef.rows * CELL * 0.5 + 0.45;
+  const pts = [];
+  for (const x of [-hx, hx]) for (const y of [0, 0.7]) for (const z of [-hz, hz]) pts.push(new THREE.Vector3(x, y, z));
+  const b = ndcBounds(pts);
+  const ins = { t: 0, b: 0, l: 0, r: 0 };
+  const inset = (p, axis) => {
+    if (axis === 'v') {
+      if ((p.y0 + p.y1) / 2 < H / 2) ins.t = Math.max(ins.t, p.y1); else ins.b = Math.max(ins.b, H - p.y0);
+    } else if ((p.x0 + p.x1) / 2 < W / 2) ins.l = Math.max(ins.l, p.x1); else ins.r = Math.max(ins.r, W - p.x0);
+  };
+  const pieces = [];
+  for (const el of chrome) {
+    const r = el.getBoundingClientRect();
+    const p = { x0: Math.max(0, r.left), x1: Math.min(W, r.right), y0: Math.max(0, r.top), y1: Math.min(H, r.bottom) };
+    if (p.x1 - p.x0 < 1 || p.y1 - p.y0 < 1) continue;
+    if (p.x1 - p.x0 > W * 0.5) inset(p, 'v');
+    else if (p.y1 - p.y0 > H * 0.5) inset(p, 'h');
+    else pieces.push(p);
+  }
+  const m = Math.round(Math.min(W, H) * 0.03);
+  const toNdc = (r) => ({ x0: (2 * r.x0) / W - 1, x1: (2 * r.x1) / W - 1, y0: 1 - (2 * r.y1) / H, y1: 1 - (2 * r.y0) / H });
+  let f = null;
+  for (let pass = 0, passes = pieces.length; pass <= passes; pass++) {
+    const sx0 = ins.l + m, sx1 = W - ins.r - m, sy0 = ins.t + m, sy1 = H - ins.b - m;
+    if (sx1 - sx0 < W * 0.3 || sy1 - sy0 < H * 0.3) break;
+    const s = toNdc({ x0: sx0, x1: sx1, y0: sy0, y1: sy1 });
+    const z = Math.min(3, Math.max(0.3, Math.min((s.x1 - s.x0) / (b.x1 - b.x0), (s.y1 - s.y0) / (b.y1 - b.y0))));
+    // Board centre c lands on free-rect centre: (c - window) · z = centre.
+    f = { z, x: (b.x0 + b.x1) / 2 - (s.x0 + s.x1) / 2 / z, y: (b.y0 + b.y1) / 2 - (s.y0 + s.y1) / 2 / z };
+    const sb = { x0: (b.x0 - f.x) * z, x1: (b.x1 - f.x) * z, y0: (b.y0 - f.y) * z, y1: (b.y1 - f.y) * z };
+    const hit = pieces.find((p) => {
+      const q = toNdc(p);
+      return sb.x0 < q.x1 && sb.x1 > q.x0 && sb.y0 < q.y1 && sb.y1 > q.y0;
+    });
+    if (!hit) break;
+    pieces.splice(pieces.indexOf(hit), 1);
+    const costV = ((hit.y0 + hit.y1) / 2 < H / 2 ? hit.y1 : H - hit.y0) / H;
+    const costH = ((hit.x0 + hit.x1) / 2 < W / 2 ? hit.x1 : W - hit.x0) / W;
+    inset(hit, costV <= costH ? 'v' : 'h');
+  }
+  if (!f) return;
+  // Virtual frame = the authored view (2·aspect × 2); render the 2/z window centred on (x, y).
+  const A = camera.aspect, sz = 2 / f.z;
+  camera.setViewOffset(2 * A, 2, (f.x + 1 - sz / 2) * A, 1 - f.y - sz / 2, sz * A, sz);
 }
 
 /* ---------------- level construction ---------------- */

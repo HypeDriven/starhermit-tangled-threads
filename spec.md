@@ -77,7 +77,7 @@ The DOM board mirror is a permanent, always-interactive second control surface f
 - **Wide desktop (≥1024 CSS px):** centered playfield, objective/progression rail on the left, contextual actions and social/status rail on the right. Maximum line length is 70 characters.
 - **Compact desktop/tablet:** playfield remains central; secondary rails collapse into drawers. Pointer hover may preview but never be required.
 - **Portrait mobile:** top safe-area status bar, square or perspective-fit playfield, bottom thumb-zone action tray, and sheet-based secondary panels. Never place critical controls under browser chrome or display cutouts. The action tray stacks above the hint bar by its measured height, so wrapped lesson text never sits under the buttons. Overlay screens are safe-centred (scrollable from the top in short viewports) and the board mirror hides while paused.
-- **Large screens (above 1600×1000):** every DOM UI layer (HUD, hint bar, action tray, overlay screens, toasts, compatibility banner, frame-rate meter) zooms by `--ui-scale` from the shared `ui-scale.js` (min(w/1600, h/1000), capped at 2.5), so the layout looks like the 1600×1000 one magnified; the full-viewport Three.js canvas stays unzoomed and keeps its framing. The mode-card row is capped at 72rem.
+- **Large screens (above 1600×1000):** every DOM UI layer (HUD, hint bar, action tray, overlay screens, toasts, compatibility banner, frame-rate meter) zooms by `--ui-scale` from the shared `ui-scale.js` (min(w/1600, h/1000), capped at 2.5), so the layout looks like the 1600×1000 one magnified; the full-viewport Three.js canvas stays unzoomed. In play the board is framed into the canvas the HUD leaves free (see Camera and motion). The mode-card row is capped at 72rem.
 - **Landscape mobile:** reserve a narrow status rail; preserve at least 44×44 CSS-pixel targets and 8-pixel separation.
 - React to resize, orientation, device-pixel-ratio, safe-area insets, virtual keyboard, and visibility changes without losing input or restarting the round.
 
@@ -128,6 +128,8 @@ The subject is the active playfield at near-tabletop to room scale, framed so st
 
 - Choose orthographic or low-distortion perspective according to depth requirements; expose framing constants rather than magic offsets.
 - Camera transitions use authored duration/easing or critically damped springs and remain interruptible. Never animate by cumulative per-frame lerp.
+- Play framing: the authored camera keeps its position and angle, and a lens shift + zoom (`setViewOffset`) fits the board (frame and spools) into the canvas rect left free by the HUD pills and action tray at every size and aspect. The docked board mirror is avoided only when the board would sit under it. The board is re-fitted on resize and when HUD chrome changes size. Picking uses the same projection. The title backdrop keeps the authored framing.
+- Toasts over a menu, pause or results screen float at the top, and the screen is padded by the toast's height (`--toast-h`) so headings and buttons stay uncovered.
 - Decorative motion is paused or reduced when hidden. Gameplay animation derives from simulation state and interpolation alpha, not frame count.
 - Camera shake is low-amplitude, event-tiered, disabled by reduced motion, and never changes raycast truth.
 

@@ -70,9 +70,15 @@ function toast(msg, ms = 2600) {
   const el = $('sh-toast');
   el.textContent = msg;
   el.hidden = false;
+  // Over a menu/results/pause screen the toast floats at the top and the
+  // screen is padded by its height, so it never covers headings or buttons.
+  document.documentElement.style.setProperty('--toast-h', el.offsetHeight + 8 + 'px');
   ui.announce(msg);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  toastTimer = setTimeout(() => {
+    el.hidden = true;
+    document.documentElement.style.setProperty('--toast-h', '0px');
+  }, ms);
 }
 
 async function copyInvite() {
@@ -818,6 +824,13 @@ function boot() {
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('resize', () => render.resize());
   window.addEventListener('orientationchange', () => setTimeout(() => render.resize(), 60));
+  // Frame the board in the canvas the play HUD leaves free (re-fit when it changes).
+  const chrome = [$('hud'), $('action-tray'), $('mirror-panel')];
+  render.setFramingChrome(() => ($('hud').hidden ? null : chrome));
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(() => render.reframe());
+    for (const el of chrome) ro.observe(el);
+  }
   document.addEventListener('visibilitychange', onVisibility);
   // First gesture unlocks audio.
   window.addEventListener('pointerdown', () => audio.startAudio(), { once: true });

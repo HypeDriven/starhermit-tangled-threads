@@ -113,6 +113,9 @@
   #sh-toast { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%);
     z-index: 60; max-width: min(calc(92vw / var(--ui-scale, 1)), 34rem); padding: .6rem 1.1rem; border-radius: .8rem; text-align: center;
     background: var(--panel); border: 1px solid var(--accent); color: var(--text); overflow-wrap: anywhere; }
+  body:has(.screen:not(.transparent):not([hidden])) #sh-toast { top: calc(.5rem + env(safe-area-inset-top)); bottom: auto; }
+  body:has(.screen:not(.transparent):not([hidden])):has(#sh-toast:not([hidden])) .screen:not(.transparent) {
+    padding-top: calc(1rem + var(--safe-t) + var(--toast-h, 0px)); }
   #sr-announcer, #sr-errors { position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; }
 

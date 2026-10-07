@@ -36,6 +36,7 @@ let onSync = null;       // (status)
 let onAuth = null;       // ({signedIn})
 let pushedPrefs = {};
 let prefTimer = null;
+let cloudReady = false;  // set once the start-up cloud load has resolved
 
 function emitIdentity() {
   if (typeof onIdentity === 'function') {
@@ -78,6 +79,10 @@ function cloudData() {
 
 function queueCloudSave() {
   if (!isHosted()) return; // offline: localStorage is the only store
+  // Boot writes (applySettings) run before the cloud load resolves; pushing
+  // then would queue the stale local cache over a newer cloud save (and a
+  // pagehide during the load would flush it). loadCloudSave pushes instead.
+  if (!cloudReady) return;
   setSync('saving');
   const data = cloudData();
   SH.saveJSON({ v: 1, data, check: checksum(data) }, CLOUD_DEBOUNCE_MS);
@@ -86,7 +91,8 @@ function queueCloudSave() {
 // Returns true when a remote doc was adopted into the local cache.
 async function loadCloudSave() {
   if (!isHosted()) return false;
-  const doc = await SH.loadJSON();
+  const doc = await SH.loadJSON().catch(() => null);
+  cloudReady = true;
   if (!doc || typeof doc !== 'object' || !doc.data || doc.check !== checksum(doc.data)) {
     queueCloudSave(); // no save yet: seed the cloud slot from the local cache
     return false;

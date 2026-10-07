@@ -204,6 +204,22 @@ export async function compareResult(localBest) {
   return 'Offline — score kept locally.';
 }
 
+/** Post a finished ranked round's total to the platform `high-score` board
+ *  (score-script.js) via StarHermit.submitScores. Resolves {posted, rank} —
+ *  the player's rank on that board, or null. Signed out: no request. */
+export async function postHighScore(total) {
+  if (!isHosted()) return { posted: false, rank: null };
+  try {
+    const keys = await SH.submitScores({ 'high-score': total });
+    if (!keys || keys.indexOf('high-score') < 0) return { posted: false, rank: null };
+    try {
+      const r = await SH.leaderboard('high-score', { pageSize: 100 });
+      const me = ((r && r.items) || []).find((i) => i.userId === SH.userId);
+      return { posted: true, rank: me ? me.rank : null };
+    } catch { return { posted: true, rank: null }; }
+  } catch { return { posted: false, rank: null }; }
+}
+
 /* ---------------- public surface ---------------- */
 
 export const platform = {
@@ -219,6 +235,7 @@ export const platform = {
   init: initPlatform,
   serverNow,
   compareResult,
+  postHighScore,
   queueCloudSave,
   flushCloudSave: () => (isHosted() ? SH.flushSave(true) : Promise.resolve(false)),
   pushSettings,

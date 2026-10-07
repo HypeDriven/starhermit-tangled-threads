@@ -174,7 +174,7 @@ The Settings panel has **General** and **Graphics** tabs. Graphics offers Qualit
 - `ui`: responsive DOM shell, focus, localization, settings, overlays, accessibility mirror.
 - `audio`: buses, event mapping, focus/background behavior, decode and memory policy.
 - `content`: versioned levels, themes, tutorials, validation metadata.
-- `platform`: token-aware REST adapter (src/platform.js): fragment launch token, Bearer auth, 45-min re-mint, profile nickname, cloud-save mirror, read-only leaderboard access, retries/rate-limit tolerance.
+- `platform`: token-aware REST adapter (src/platform.js): fragment launch token, Bearer auth, 45-min re-mint, profile nickname, cloud-save mirror, high-score posting and leaderboard reads, retries/rate-limit tolerance.
 
 No module may mutate rules state except through a validated command. Rendering consumes immutable snapshots plus interpolation data. UI state and simulation state are separate so closing a drawer cannot affect a match.
 
@@ -214,7 +214,7 @@ No module may mutate rules state except through a validated command. Rendering c
 
 ### Achievements and leaderboards
 - Declare a small static achievement set: first completion, mechanic mastery, a sustained streak, a difficult content milestone, and an accessibility-neutral long-term goal. Keys are stable, lowercase identifiers; unlocks are idempotent.
-- Provide a global board for the primary metric plus a fair daily/weekly board. The client never submits scores; on the hosted platform the leaderboard is read-only (`StarHermit.leaderboard()`, nicknames via `profile()`) and personal bests are kept locally + cloud-saved. `server.js` keeps a replay-validating submit route (ruleset, content version, seed, assists, duration) for tooling/tests only.
+- Leaderboard: signed in, every finished ranked round (Journey, Daily, Challenge — complete or out of moves) posts its total through `StarHermit.submitScores` (a practice session whose `score-script.js` posts it to the `high-score` board: integer, higher is better, 0–1,800), and the results screen shows "Leaderboard rank: #N" (or posted / not posted), localized in `src/sh-i18n.js`. Standalone nothing is posted; a completed ranked round shows "Offline — score kept locally." Personal bests are kept locally + cloud-saved. `server.js` keeps a replay-validating submit route (ruleset, content version, seed, assists, duration) for tooling/tests only.
 - For globally competitive boards, validate score claims through a lightweight authoritative script using replayable input logs and deterministic seeds. If validation is unavailable, label the board casual and apply plausibility/rate checks.
 
 ### Sessions and transport
@@ -223,7 +223,7 @@ No module may mutate rules state except through a validated command. Rendering c
 - Realtime rooms, peer relay, matchmaking, backfill, and voice are intentionally not used because they add no value to this ruleset.
 
 ### Publishing and operations
-- Keep the authoritative script inside the distribution and declare it with `server=server.js`. Choose a digest-pinned container only if profiling proves the sandbox unsuitable; no initial design here requires one.
+- The platform script is `score-script.js` (declared with `server=score-script.js`; canonical copy in the games repo's `tools/score-script.js`): it range-checks posted scores and writes them to the `high-score` board. `server.js` is the local dev server. Choose a digest-pinned container only if profiling proves the sandbox unsuitable; no initial design here requires one.
 - Define control defaults, achievement metadata, and versioned settings before release. Publish immutable build assets, verify the launch path, maintain migration tests for saves, and expose no secret configuration to the client.
 - Capture anonymous funnel events only for start, tutorial step, round end, retry, settings change, and error category. Avoid raw text, precise personal data, and cross-title tracking.
 

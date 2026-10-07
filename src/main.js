@@ -425,9 +425,20 @@ function finishRound() {
     ? 'Achievement unlocked: ' + unlocked.map((k) => ACHIEVEMENTS.find((a) => a.key === k)?.name || k).join(', ')
     : '';
 
-  // Ranked comparison: hosted play reads the platform leaderboard (read-only).
+  // Ranked rounds: signed in, the total posts to the platform high-score board
+  // and the rank line shows; standalone the comparison line says it stays local.
   $('results-compare').textContent = '';
-  if (session.ranked && t.reason === 'complete') {
+  const lb = $('results-lb');
+  lb.hidden = true;
+  if (session.ranked && platform.hosted) {
+    const s = session;
+    lb.hidden = false;
+    lb.textContent = shText('lbPosting');
+    platform.postHighScore(Math.max(0, Math.round(score.total))).then((r) => {
+      if (session !== s) return;
+      lb.textContent = !r.posted ? shText('lbNotPosted') : r.rank ? shText('lbRank', { rank: r.rank }) : shText('lbPosted');
+    });
+  } else if (session.ranked && t.reason === 'complete') {
     platform.compareResult(progress.bestScores[session.level.id])
       .then((line) => { $('results-compare').textContent = line; });
   }

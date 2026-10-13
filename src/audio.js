@@ -26,7 +26,7 @@ function ensure() {
     const g = ctx.createGain();
     g.gain.value = volumes[name];
     g.connect(master);
-    buses[name] = g;
+    buses[name] = (globalThis.GameOptions ? globalThis.GameOptions.tagBus(g, name) : g);
   }
   return ctx;
 }
@@ -90,7 +90,7 @@ function playEventSample(event) {
   const name = names[Math.floor(rand() * names.length)];
   const buf = sampleBuffers.get(name);
   if (!buf) { loadSample(name); return false; }
-  const src = ctx.createBufferSource();
+  const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), event) : ctx.createBufferSource());
   src.buffer = buf;
   src.connect(buses.effects || master);
   src.start();
@@ -115,7 +115,7 @@ export function getBusVolume(bus) { return volumes[bus] ?? 0.5; }
 function tone(bus, freq, dur, gain, type = 'sine', slideTo = null) {
   const c = ensure();
   if (!c || !started) return;
-  const osc = c.createOscillator();
+  const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), bus) : c.createOscillator());
   const g = c.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, c.currentTime);
@@ -153,10 +153,10 @@ export const sfx = {
 function startAmbience() {
   const c = ctx;
   if (!c || ambienceNodes) return;
-  const o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 82;
-  const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 123.5;
+  const o1 = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()); o1.type = 'sine'; o1.frequency.value = 82;
+  const o2 = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()); o2.type = 'sine'; o2.frequency.value = 123.5;
   const g = c.createGain(); g.gain.value = 0.05;
-  const lfo = c.createOscillator(); lfo.frequency.value = 0.07;
+  const lfo = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(c.createOscillator(), null) : c.createOscillator()); lfo.frequency.value = 0.07;
   const lfoG = c.createGain(); lfoG.gain.value = 0.02;
   lfo.connect(lfoG); lfoG.connect(g.gain);
   o1.connect(g); o2.connect(g); g.connect(buses.ambience);

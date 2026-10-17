@@ -8,6 +8,7 @@
 // play with no console noise.
 
 import { loadSettings, saveSettings, loadProgress, saveProgress, checksum } from './ui.js';
+import { t } from './i18n.js';
 
 const CLOUD_DEBOUNCE_MS = 2000;
 const SETTINGS_PUSH_MS = 800;
@@ -37,6 +38,7 @@ let onAuth = null;       // ({signedIn})
 let pushedPrefs = {};
 let prefTimer = null;
 let cloudReady = false;  // set once the start-up cloud load has resolved
+let onMerged = null;     // () after a save conflict merged remote progress into the local cache
 
 function emitIdentity() {
   if (typeof onIdentity === 'function') {
@@ -54,6 +56,18 @@ function setSync(status) {
 
 if (SH) {
   SH.on('saved', (ok) => setSync(ok ? 'synced' : 'offline'));
+  // Another device saved since our last load: reload, merge (best of both,
+  // this device's settings and in-progress round), adopt, and save again.
+  SH.on('saveconflict', async () => {
+    const doc = await SH.loadJSON().catch(() => null);
+    if (validDoc(doc)) {
+      const merged = mergeData(doc.data, cloudData(), 'local');
+      saveSettings(merged.settings);
+      saveProgress(merged.progress);
+      if (typeof onMerged === 'function') { try { onMerged(); } catch { /* listener guard */ } }
+    }
+    if (!SH.saveConflicted()) queueCloudSave();
+  });
   SH.on('auth', (a) => {
     if (!a.signedIn) { nickname = null; setSync('local'); }
     if (typeof onAuth === 'function') { try { onAuth(a); } catch { /* listener guard */ } }
@@ -66,15 +80,56 @@ if (SH) {
 
 async function fetchProfile(userId) {
   const p = SH ? await SH.profile(userId) : null;
-  return p ? String(p.displayName).slice(0, 24) : 'Player ' + String(userId).slice(0, 6);
+  return p ? String(p.displayName).slice(0, 24) : t('playerFallback', { id: String(userId).slice(0, 6) });
 }
 
 /* ---------------- cloud save ---------------- */
-// ONE slot (game:<slug>): {v, data:{settings, progress}, check}. Remote wins
-// on start; localStorage stays the offline cache underneath.
+// ONE slot (game:<slug>): {v, data:{settings, progress}, check}. On start and
+// after a save conflict the remote and local docs are merged (mergeData);
+// localStorage stays the offline cache underneath.
 
 function cloudData() {
   return { settings: loadSettings(), progress: loadProgress() };
+}
+
+function validDoc(doc) {
+  return !!(doc && typeof doc === 'object' && doc.data && doc.check === checksum(doc.data));
+}
+
+const obj = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? o : {});
+function maxMap(a, b) {
+  const out = { ...obj(a) };
+  for (const [k, v] of Object.entries(obj(b))) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    out[k] = Number.isFinite(Number(out[k])) ? Math.max(Number(out[k]), n) : n;
+  }
+  return out;
+}
+
+/** Progress from two devices: best score per board, union of days, earliest unlock per achievement. */
+export function mergeProgress(a, b) {
+  a = obj(a); b = obj(b);
+  const achievements = { ...obj(a.achievements) };
+  for (const [k, v] of Object.entries(obj(b.achievements))) achievements[k] = achievements[k] ? Math.min(achievements[k], v) : v;
+  return {
+    ...a, ...b,
+    version: Math.max(Number(a.version) || 1, Number(b.version) || 1),
+    stagesDone: maxMap(a.stagesDone, b.stagesDone),
+    dailiesDone: maxMap(a.dailiesDone, b.dailiesDone),
+    challengesDone: maxMap(a.challengesDone, b.challengesDone),
+    bestScores: maxMap(a.bestScores, b.bestScores),
+    daysPlayed: { ...obj(a.daysPlayed), ...obj(b.daysPlayed) },
+    achievements,
+  };
+}
+
+/** Merge a remote and a local save; `prefer` picks whose settings win ('remote' at boot, 'local' on conflict). */
+export function mergeData(remote, local, prefer = 'remote') {
+  const rs = obj(remote && remote.settings), ls = obj(local && local.settings);
+  const settings = prefer === 'local' ? { ...rs, ...ls } : { ...ls, ...rs };
+  settings.tutorialDone = !!(rs.tutorialDone || ls.tutorialDone);
+  return { settings, progress: mergeProgress(remote && remote.progress, local && local.progress) };
 }
 
 function queueCloudSave() {
@@ -88,17 +143,19 @@ function queueCloudSave() {
   SH.saveJSON({ v: 1, data, check: checksum(data) }, CLOUD_DEBOUNCE_MS);
 }
 
-// Returns true when a remote doc was adopted into the local cache.
+// Returns true when a remote doc was merged into the local cache.
 async function loadCloudSave() {
   if (!isHosted()) return false;
   const doc = await SH.loadJSON().catch(() => null);
   cloudReady = true;
-  if (!doc || typeof doc !== 'object' || !doc.data || doc.check !== checksum(doc.data)) {
+  if (!validDoc(doc)) {
     queueCloudSave(); // no save yet: seed the cloud slot from the local cache
     return false;
   }
-  saveSettings(doc.data.settings);
-  saveProgress(doc.data.progress);
+  // Remote settings win at boot; progress keeps the best of this device and the cloud.
+  const merged = mergeData(doc.data, cloudData(), 'remote');
+  saveSettings(merged.settings);
+  saveProgress(merged.progress);
   setSync('synced');
   return true;
 }
@@ -157,7 +214,7 @@ async function initPlatform() {
   const result = { hosted: isHosted(), remoteLoaded: false };
 
   if (isHosted()) {
-    nickname = 'Player ' + String(SH.userId).slice(0, 6);
+    nickname = t('playerFallback', { id: String(SH.userId).slice(0, 6) });
     fetchProfile(SH.userId).then((name) => { nickname = name; emitIdentity(); });
     result.remoteLoaded = await loadCloudSave();
     if (await loadPlatformSettings()) result.remoteLoaded = true;
@@ -189,19 +246,19 @@ async function fetchPlatformBoard() {
 
 /* ---------------- ranked result line ---------------- */
 // Hosted play reads the platform leaderboard; otherwise the score stays local.
+// Resolves a list of { key, vars } string parts so the line re-renders on a language change.
 
 export async function compareResult(localBest) {
   if (isHosted()) {
     const board = await fetchPlatformBoard();
-    if (board === null) {
-      return 'Globally ranked boards are unavailable on this host — score kept locally.';
-    }
-    if (!board.length) return 'Platform leaderboard has no entries yet — your score is kept locally.';
+    if (board === null) return [{ key: 'cmpUnavailable' }];
+    if (!board.length) return [{ key: 'cmpEmpty' }];
     const top = board[0];
-    const best = localBest != null ? ` Your best on this board: ${localBest}.` : '';
-    return `Platform leaderboard (read-only): #1 ${top.name} · ${top.score}.${best}`;
+    const line = [{ key: 'cmpTop', vars: { name: top.name, score: top.score } }];
+    if (localBest != null) line.push({ key: 'cmpBest', vars: { best: localBest } });
+    return line;
   }
-  return 'Offline — score kept locally.';
+  return [{ key: 'cmpOffline' }];
 }
 
 /** Post a finished ranked round's total to the platform `high-score` board
@@ -232,6 +289,8 @@ export const platform = {
   set onSync(cb) { onSync = cb; },
   get onAuth() { return onAuth; },
   set onAuth(cb) { onAuth = cb; },
+  get onMerged() { return onMerged; },
+  set onMerged(cb) { onMerged = cb; },
   init: initPlatform,
   serverNow,
   compareResult,

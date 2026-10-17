@@ -97,7 +97,8 @@
   #fps-meter { position: fixed; left: calc(var(--safe-l) + .4rem); bottom: calc(var(--safe-b) + .4rem); z-index: 30;
     pointer-events: none; font: 700 .75rem/1 ui-monospace, monospace; color: #ffe9c0; background: rgba(20,14,10,.7);
     padding: .25rem .45rem; border-radius: .3rem; }
-  @media (max-width: 480px) { .setting-row input[type="range"] { width: 7rem; } }
+  @media (max-width: 480px) { .setting-row input[type="range"] { width: 7rem; }
+    #action-tray { gap: .35rem; padding: 0 .4rem; } #action-tray .ui-btn.small { padding: .4rem .7rem; } }
 
   .score-rows { width: 100%; border-collapse: collapse; margin: .5rem 0; }
   .score-rows td { padding: .35rem .5rem; border-bottom: 1px solid rgba(255,255,255,.1); }
@@ -172,9 +173,10 @@
 <script src="ui-scale.js"></script>
 <script src="browser-guard.js"></script>
 <script src="starhermit-sdk.js"></script>
+<script src="sh-language.js"></script>
 </head>
 <body>
-<canvas id="game-canvas" aria-label="Tangled Threads playfield" role="img"></canvas>
+<canvas id="game-canvas" aria-label="Tangled Threads playfield" data-i18n-aria="canvasLabel" role="img"></canvas>
 
 <!-- HUD -->
 <header id="hud" hidden>
@@ -184,21 +186,21 @@
   <span class="pill" id="hud-timer">0:00</span>
 </header>
 <div id="hint-bar" hidden><span class="pill" id="hint-text" role="status"></span></div>
-<nav id="action-tray" hidden aria-label="Round actions">
-  <button type="button" class="ui-btn ghost small" id="btn-reel">Reel (R)</button>
-  <button type="button" class="ui-btn ghost small" id="btn-undo">Undo (U)</button>
-  <button type="button" class="ui-btn ghost small" id="btn-hint">Hint (H)</button>
-  <button type="button" class="ui-btn ghost small" id="btn-pause">Pause (Esc)</button>
+<nav id="action-tray" hidden aria-label="Round actions" data-i18n-aria="actionsLabel">
+  <button type="button" class="ui-btn ghost small" id="btn-reel" data-i18n="btnReel">Reel (R)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-undo" data-i18n="btnUndo">Undo (U)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-hint" data-i18n="btnHint">Hint (H)</button>
+  <button type="button" class="ui-btn ghost small" id="btn-pause" data-i18n="btnPause">Pause (Esc)</button>
 </nav>
 
 <!-- Title -->
 <div class="screen" id="scr-title" role="main" aria-labelledby="title-h">
   <h1 class="title" id="title-h">Tangled Threads</h1>
-  <p class="tagline">Select and route colored strands without crossings, then reel each strand into its matching spool.</p>
+  <p class="tagline" data-i18n="tagline">Select and route colored strands without crossings, then reel each strand into its matching spool.</p>
   <div class="btnrow">
-    <button type="button" id="btn-play" class="ui-btn">Play</button>
-    <button type="button" id="btn-title-help" class="ui-btn ghost">Help</button>
-    <button type="button" id="btn-title-settings" class="ui-btn ghost">Settings</button>
+    <button type="button" id="btn-play" class="ui-btn" data-i18n="play">Play</button>
+    <button type="button" id="btn-title-help" class="ui-btn ghost" data-i18n="help">Help</button>
+    <button type="button" id="btn-title-settings" class="ui-btn ghost" data-i18n="settings">Settings</button>
     <button type="button" id="btn-signin" class="ui-btn ghost" hidden>Sign in with StarHermit</button>
     <button type="button" id="btn-invite" class="ui-btn ghost" hidden>Invite a friend</button>
   </div>
@@ -208,20 +210,20 @@
 
 <!-- Mode select -->
 <div class="screen" id="scr-modes" hidden role="dialog" aria-labelledby="modes-h">
-  <h2 id="modes-h">Choose a mode</h2>
+  <h2 id="modes-h" data-i18n="chooseMode">Choose a mode</h2>
   <div class="mode-grid">
-    <button type="button" class="mode-card" data-mode="learn"><strong>Learn</strong><small>Interactive lesson — one rule at a time. About 2 minutes. Not ranked.</small></button>
-    <button type="button" class="mode-card" data-mode="journey"><strong>Journey</strong><small>40 authored stages with growing mechanics and mastery tests. Globally ranked.</small></button>
-    <button type="button" class="mode-card" data-mode="daily"><strong>Daily</strong><small>One shared seed per UTC day. Compare scores globally. Ranked.</small></button>
-    <button type="button" class="mode-card" data-mode="practice"><strong>Practice</strong><small>Pick a difficulty, restart freely, undo allowed. Never ranked.</small></button>
-    <button type="button" class="mode-card" data-mode="challenge"><strong>Challenge</strong><small>Tight move limits and tricky layouts. ~3 min · globally ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="learn"><strong data-i18n="modeLearn">Learn</strong><small data-i18n="modeLearnDesc">Interactive lesson — one rule at a time. About 2 minutes. Not ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="journey"><strong data-i18n="modeJourney">Journey</strong><small data-i18n="modeJourneyDesc">40 authored stages with growing mechanics and mastery tests. Globally ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="daily"><strong data-i18n="modeDaily">Daily</strong><small data-i18n="modeDailyDesc">One shared seed per UTC day. Compare scores globally. Ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="practice"><strong data-i18n="modePractice">Practice</strong><small data-i18n="modePracticeDesc">Pick a difficulty, restart freely, undo allowed. Never ranked.</small></button>
+    <button type="button" class="mode-card" data-mode="challenge"><strong data-i18n="modeChallenge">Challenge</strong><small data-i18n="modeChallengeDesc">Tight move limits and tricky layouts. ~3 min · globally ranked.</small></button>
   </div>
   <div id="mode-detail" class="panel" hidden>
     <h2 id="mode-detail-name"></h2>
     <p id="mode-detail-info" class="tagline"></p>
     <div class="btnrow" style="margin-top:1rem">
-      <button type="button" id="btn-mode-start" class="ui-btn">Start</button>
-      <button type="button" id="btn-mode-back" class="ui-btn secondary">Back</button>
+      <button type="button" id="btn-mode-start" class="ui-btn" data-i18n="start">Start</button>
+      <button type="button" id="btn-mode-back" class="ui-btn secondary" data-i18n="back">Back</button>
     </div>
     <div id="journey-list" class="mode-grid" style="margin-top:1rem" hidden></div>
   </div>
@@ -230,28 +232,28 @@
 <!-- Pause / settings -->
 <div class="screen" id="scr-pause" hidden role="dialog" aria-labelledby="pause-h" aria-modal="true">
   <div class="panel">
-    <h2 id="pause-h">Paused</h2>
+    <h2 id="pause-h" data-i18n="paused">Paused</h2>
     <div class="btnrow" style="margin-bottom:1rem">
       <button type="button" id="btn-resume" class="ui-btn">Resume</button>
-      <button type="button" id="btn-restart" class="ui-btn secondary">Restart</button>
-      <button type="button" id="btn-leave" class="ui-btn ghost">Leave round</button>
+      <button type="button" id="btn-restart" class="ui-btn secondary" data-i18n="restart">Restart</button>
+      <button type="button" id="btn-leave" class="ui-btn ghost" data-i18n="leaveRound">Leave round</button>
     </div>
-    <div class="settings-tabs" role="tablist" aria-label="Settings">
+    <div class="settings-tabs" role="tablist" aria-label="Settings" data-i18n-aria="settingsLabel">
       <button type="button" role="tab" id="tab-general" data-settings-tab="general" aria-selected="true" aria-controls="settings-block">General</button>
       <button type="button" role="tab" id="tab-graphics" data-settings-tab="graphics" aria-selected="false" aria-controls="gfx-block" tabindex="-1">Graphics</button>
     </div>
-    <section aria-label="Settings" id="settings-block" role="tabpanel" aria-labelledby="tab-general">
-      <div class="setting-row"><label for="vol-music">Music volume</label><input type="range" id="vol-music" min="0" max="100" value="50"></div>
-      <div class="setting-row"><label for="vol-effects">Effects volume</label><input type="range" id="vol-effects" min="0" max="100" value="80"></div>
-      <div class="setting-row"><label for="vol-ambience">Ambience volume</label><input type="range" id="vol-ambience" min="0" max="100" value="40"></div>
-      <div class="setting-row"><label for="vol-voice">Voice/cue volume</label><input type="range" id="vol-voice" min="0" max="100" value="80"></div>
-      <div class="setting-row"><label for="chk-motion">Reduced motion</label><input type="checkbox" id="chk-motion"></div>
-      <div class="setting-row"><label for="chk-contrast">High contrast</label><input type="checkbox" id="chk-contrast"></div>
-      <div class="setting-row"><label for="chk-cvd">Color-vision-safe palette</label><input type="checkbox" id="chk-cvd"></div>
-      <div class="setting-row"><label for="chk-text">Larger text</label><input type="checkbox" id="chk-text"></div>
-      <div class="setting-row"><label for="chk-left">Left-handed controls</label><input type="checkbox" id="chk-left"></div>
-      <div class="setting-row"><label for="chk-haptics">Haptics (vibration)</label><input type="checkbox" id="chk-haptics" checked></div>
-      <div class="setting-row"><label for="btn-replay-tut">Tutorial</label><button type="button" id="btn-replay-tut" class="ui-btn small secondary">Replay tutorial</button></div>
+    <section aria-label="Settings" data-i18n-aria="settingsLabel" id="settings-block" role="tabpanel" aria-labelledby="tab-general">
+      <div class="setting-row"><label for="vol-music" data-i18n="volMusic">Music volume</label><input type="range" id="vol-music" min="0" max="100" value="50"></div>
+      <div class="setting-row"><label for="vol-effects" data-i18n="volEffects">Effects volume</label><input type="range" id="vol-effects" min="0" max="100" value="80"></div>
+      <div class="setting-row"><label for="vol-ambience" data-i18n="volAmbience">Ambience volume</label><input type="range" id="vol-ambience" min="0" max="100" value="40"></div>
+      <div class="setting-row"><label for="vol-voice" data-i18n="volVoice">Voice/cue volume</label><input type="range" id="vol-voice" min="0" max="100" value="80"></div>
+      <div class="setting-row"><label for="chk-motion" data-i18n="reducedMotion">Reduced motion</label><input type="checkbox" id="chk-motion"></div>
+      <div class="setting-row"><label for="chk-contrast" data-i18n="highContrast">High contrast</label><input type="checkbox" id="chk-contrast"></div>
+      <div class="setting-row"><label for="chk-cvd" data-i18n="cvdPalette">Color-vision-safe palette</label><input type="checkbox" id="chk-cvd"></div>
+      <div class="setting-row"><label for="chk-text" data-i18n="largerText">Larger text</label><input type="checkbox" id="chk-text"></div>
+      <div class="setting-row"><label for="chk-left" data-i18n="leftHanded">Left-handed controls</label><input type="checkbox" id="chk-left"></div>
+      <div class="setting-row"><label for="chk-haptics" data-i18n="haptics">Haptics (vibration)</label><input type="checkbox" id="chk-haptics" checked></div>
+      <div class="setting-row"><label for="btn-replay-tut" data-i18n="tutorial">Tutorial</label><button type="button" id="btn-replay-tut" class="ui-btn small secondary" data-i18n="replayTutorial">Replay tutorial</button></div>
     </section>
     <section id="gfx-block" role="tabpanel" aria-labelledby="tab-graphics" hidden>
       <div class="setting-row gfx-row"><label for="sel-quality" id="gfx-l-quality">Quality</label><select id="sel-quality" data-gfx="preset"></select></div>
@@ -269,22 +271,22 @@
 <!-- Results -->
 <div class="screen" id="scr-results" hidden role="dialog" aria-labelledby="results-h" aria-modal="true">
   <div class="panel center">
-    <h2 id="results-h">Round complete</h2>
+    <h2 id="results-h" data-i18n="roundComplete">Round complete</h2>
     <p id="results-sub" class="tagline"></p>
-    <table class="score-rows" aria-label="Score breakdown">
-      <tr><td>Completion</td><td id="sc-completion">0</td></tr>
-      <tr><td>Efficiency (moves vs par)</td><td id="sc-efficiency">0</td></tr>
-      <tr><td>Independence (hints)</td><td id="sc-independence">0</td></tr>
-      <tr><td>Discipline (invalid actions)</td><td id="sc-discipline">0</td></tr>
-      <tr class="score-total"><td>Total</td><td id="sc-total">0</td></tr>
+    <table class="score-rows" aria-label="Score breakdown" data-i18n-aria="scoreBreakdown">
+      <tr><td data-i18n="scCompletion">Completion</td><td id="sc-completion">0</td></tr>
+      <tr><td data-i18n="scEfficiency">Efficiency (moves vs par)</td><td id="sc-efficiency">0</td></tr>
+      <tr><td data-i18n="scIndependence">Independence (hints)</td><td id="sc-independence">0</td></tr>
+      <tr><td data-i18n="scDiscipline">Discipline (invalid actions)</td><td id="sc-discipline">0</td></tr>
+      <tr class="score-total"><td data-i18n="scTotal">Total</td><td id="sc-total">0</td></tr>
     </table>
     <p id="results-compare" class="tagline" aria-live="polite"></p>
     <p id="results-lb" class="tagline" role="status" hidden></p>
     <p id="results-achievements" class="tagline" aria-live="polite"></p>
     <div class="btnrow" style="margin-top:1rem">
-      <button type="button" id="btn-next" class="ui-btn">Next</button>
-      <button type="button" id="btn-retry" class="ui-btn secondary">Retry</button>
-      <button type="button" id="btn-results-home" class="ui-btn ghost">Home</button>
+      <button type="button" id="btn-next" class="ui-btn" data-i18n="next">Next</button>
+      <button type="button" id="btn-retry" class="ui-btn secondary" data-i18n="retry">Retry</button>
+      <button type="button" id="btn-results-home" class="ui-btn ghost" data-i18n="home">Home</button>
     </div>
   </div>
 </div>
@@ -292,28 +294,28 @@
 <!-- Help -->
 <div class="screen" id="scr-help" hidden role="dialog" aria-labelledby="help-h">
   <div class="panel">
-    <h2 id="help-h">How to play</h2>
-    <div class="rule-card"><strong>Goal.</strong> Route every colored strand across the board so its tip reaches the spool of the same color and shape, then reel it in.</div>
-    <div class="rule-card"><strong>No crossings.</strong> Strands may never share or cross a cell. Occupied cells are blocked for every other strand.</div>
-    <div class="rule-card"><strong>Routing.</strong> Tap a strand to select it, then tap or drag through empty neighboring cells to extend it. Tap the cell behind the tip (or press <kbd>U</kbd>) to pull back.</div>
-    <div class="rule-card"><strong>Reeling.</strong> When the tip rests on its matching spool, tap the spool or press <kbd>R</kbd> to reel the strand in. Reel all strands to finish the board.</div>
-    <div class="rule-card"><strong>Scoring.</strong> Completion (up to 1000) + efficiency vs par (up to 500) + hint independence (up to 200) + discipline (up to 100). Fewer moves and zero hints score higher.</div>
+    <h2 id="help-h" data-i18n="howToPlay">How to play</h2>
+    <div class="rule-card" data-i18n-html="ruleGoal"><strong>Goal.</strong> Route every colored strand across the board so its tip reaches the spool of the same color and shape, then reel it in.</div>
+    <div class="rule-card" data-i18n-html="ruleNoCross"><strong>No crossings.</strong> Strands may never share or cross a cell. Occupied cells are blocked for every other strand.</div>
+    <div class="rule-card" data-i18n-html="ruleRouting"><strong>Routing.</strong> Tap a strand to select it, then tap or drag through empty neighboring cells to extend it. Tap the cell behind the tip (or press <kbd>U</kbd>) to pull back.</div>
+    <div class="rule-card" data-i18n-html="ruleReeling"><strong>Reeling.</strong> When the tip rests on its matching spool, tap the spool or press <kbd>R</kbd> to reel the strand in. Reel all strands to finish the board.</div>
+    <div class="rule-card" data-i18n-html="ruleScoring"><strong>Scoring.</strong> Completion (up to 1000) + efficiency vs par (up to 500) + hint independence (up to 200) + discipline (up to 100). Fewer moves and zero hints score higher.</div>
     <div class="rule-card" id="help-keys"><strong>Keyboard.</strong> <kbd>Tab</kbd>/<kbd>←→↑↓</kbd> move among cells · <kbd>Enter</kbd>/<kbd>Space</kbd> select or extend · <kbd>R</kbd> reel · <kbd>U</kbd> undo · <kbd>H</kbd> hint · <kbd>Esc</kbd> pause · <kbd>C</kbd> reset camera.</div>
-    <div class="btnrow" style="margin-top:1rem"><button type="button" id="btn-help-close" class="ui-btn">Close</button></div>
+    <div class="btnrow" style="margin-top:1rem"><button type="button" id="btn-help-close" class="ui-btn" data-i18n="close">Close</button></div>
   </div>
 </div>
 
 <!-- DOM accessibility mirror of the board -->
-<div class="screen transparent" id="scr-board-mirror" hidden aria-label="Board mirror">
+<div class="screen transparent" id="scr-board-mirror" hidden aria-label="Board mirror" data-i18n-aria="boardMirror">
   <div id="mirror-panel">
-    <p id="mirror-caption" hidden>Board mirror</p>
-    <div id="dom-board" role="group" aria-label="Board cells"></div>
+    <p id="mirror-caption" hidden data-i18n="boardMirror">Board mirror</p>
+    <div id="dom-board" role="group" aria-label="Board cells" data-i18n-aria="boardCells"></div>
   </div>
 </div>
 
 <div id="compat-msg" role="status" hidden>
-  <h2>3D unavailable</h2>
-  <p class="tagline">Your browser could not create a WebGL context. The board below stays fully playable and your progress is preserved.</p>
+  <h2 data-i18n="compatTitle">3D unavailable</h2>
+  <p class="tagline" data-i18n="compatText">Your browser could not create a WebGL context. The board below stays fully playable and your progress is preserved.</p>
 </div>
 
 <div id="sr-announcer" aria-live="polite"></div>

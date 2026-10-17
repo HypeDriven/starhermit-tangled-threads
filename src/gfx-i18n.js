@@ -1,5 +1,5 @@
 // Tangled Threads — strings for the Graphics settings tab, per locale.
-// The rest of the game is English-only; the Graphics tab follows navigator.language.
+// Callers pass the game locale from src/i18n.js.
 
 const en = {
   tabGeneral: 'General', tabGraphics: 'Graphics', heading: 'Graphics',

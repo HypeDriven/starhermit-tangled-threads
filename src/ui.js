@@ -3,6 +3,7 @@
 // The StarHermit platform adapter lives in platform.js.
 
 import { STRAND_COLORS, STRAND_COLORS_CVD } from './content.js';
+import { t } from './i18n.js';
 
 /* ---------------- settings (versioned, checksummed, local) ---------------- */
 
@@ -140,7 +141,7 @@ export function renderDomBoard(container, state, opts, onCell) {
     b.dataset.cell = cell;
     const info = cellInfo.get(cell);
     const r = Math.floor(cell / state.cols), c = cell % state.cols;
-    const where = `row ${r + 1} column ${c + 1}`;
+    const where = t('cellWhere', { row: r + 1, col: c + 1 });
     if (info && info.strand !== undefined) {
       const hex = strandHex(state.strands[info.strand].color, cvd);
       b.textContent = info.tip ? (info.spool !== undefined ? '◉' : '●') : '—';
@@ -148,19 +149,19 @@ export function renderDomBoard(container, state, opts, onCell) {
       b.style.color = inkOn(hex);
       b.style.borderColor = hex;
       if (info.done) b.style.opacity = '.45';
-      const part = info.tip ? 'tip' : info.anchor ? 'anchor' : 'body';
-      b.setAttribute('aria-label',
-        `Strand ${info.strand + 1} ${part}${info.done ? ', reeled in' : ''}${info.spool !== undefined ? ', on its spool' : ''}, ${where}`);
+      const part = t(info.tip ? 'partTip' : info.anchor ? 'partAnchor' : 'partBody');
+      const flags = (info.done ? t('cellReeled') : '') + (info.spool !== undefined ? t('cellOnSpool') : '');
+      b.setAttribute('aria-label', t('cellStrand', { n: info.strand + 1, part, flags, where }));
       if (info.strand === selection) b.classList.add('sel');
     } else if (info && info.spool !== undefined) {
       const hex = strandHex(state.strands[info.spool].color, cvd);
       b.textContent = '◉';
       b.style.borderColor = hex;
       b.style.color = hex;
-      b.setAttribute('aria-label', `Empty spool for strand ${info.spool + 1}, ${where}`);
+      b.setAttribute('aria-label', t('cellEmptySpool', { n: info.spool + 1, where }));
       if (info.spool === selection) b.classList.add('sel');
     } else {
-      b.setAttribute('aria-label', `Empty cell, ${where}`);
+      b.setAttribute('aria-label', t('cellEmpty', { where }));
     }
     if (cell === cursor) { b.classList.add('cursor'); b.setAttribute('aria-current', 'location'); }
     b.addEventListener('click', () => onCell(cell));

@@ -1,5 +1,5 @@
 // sh-i18n.js — strings for the StarHermit platform controls (sign-in,
-// invite) in every supported locale, picked from navigator.language.
+// invite, leaderboard lines) in every supported locale; callers pass the game locale.
 const en = {
   signIn: 'Sign in with StarHermit', invite: 'Invite a friend',
   copied: 'Invite link copied to the clipboard', copyFail: 'Copy this invite link: {url}',

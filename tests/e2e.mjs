@@ -31,6 +31,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launchToken, stubStarHermit } from './starhermit-e2e.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHOT = (stage, vp) => `/tmp/tangled-threads-e2e-${stage}-${vp}.png`;
@@ -137,8 +138,7 @@ async function startPractice(page, levelId) {
   await page.waitForFunction(() => !document.getElementById('scr-modes').hidden);
   await page.locator('.mode-card[data-mode="practice"]').click();
   await page.waitForFunction(() => !document.getElementById('journey-list').hidden);
-  const want = levelId.replace('-', ' ');
-  await page.locator('#journey-list .mode-card').filter({ hasText: want }).click();
+  await page.locator(`#journey-list .mode-card[data-level="${levelId}"]`).click();
   await waitPlayActive(page);
 }
 
@@ -336,6 +336,76 @@ async function runPass(browser, name, ctxOpts, { full, tap }) {
   console.log(`ok - ${name}: zero same-origin /api or /ws requests`);
 }
 
+// ---------- language + report (signed in, stubbed StarHermit API) ----------
+// Automatic follows the account's preferred language (fr-CA); choosing another
+// language in Settings re-renders visible text live (title, settings, HUD mid-round)
+// and PUTs ui.language; Report a problem posts to /reports.
+async function languagePass(browser, name, ctxOpts) {
+  const errors = [];
+  const context = await browser.newContext(ctxOpts);
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  page.on('console', (m) => {
+    if (!['error', 'warning'].includes(m.type()) || browserNoise.test(m.text())) return;
+    errors.push(`console: ${m.text()}`);
+  });
+  try {
+    const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+    await page.goto('about:blank');
+    await page.goto(BASE + '/index.html#game_token=' + launchToken(), { waitUntil: 'load' });
+    await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+    await page.waitForSelector('#scr-title:not([hidden])');
+    if ((await page.textContent('#btn-play')).trim() !== 'Jouer') throw new Error('title not in fr-CA');
+    await page.click('#btn-title-settings');
+    await page.click('#tab-graphics');
+    const choice = page.locator('[data-game-language="choice"]');
+    await choice.scrollIntoViewIfNeeded();
+    const auto = await choice.locator('option').first().textContent();
+    if (auto !== 'Automatique — Français (Canada)') throw new Error(`Automatic label not resolved: "${auto}"`);
+    await choice.selectOption('it-IT');
+    await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+    await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]').textContent));
+    if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+    if ((await page.textContent('#btn-resume')).trim() !== 'Indietro') throw new Error('settings Back button not re-rendered');
+    if ((await page.textContent('#tab-general')).trim() !== 'Generale') throw new Error('settings tabs not re-rendered');
+    await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+    await page.fill('[data-game-report="title"]', 'Test report');
+    await page.click('[data-game-report="send"]');
+    await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+    if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+    ok(`${name}: Automatic resolved fr-CA from the account; Italian applied live, saved to ui.language; report posted`);
+
+    // German at this viewport, then switch back to Automatic mid-round.
+    await choice.selectOption('de-DE');
+    await page.waitForFunction(() => document.documentElement.lang === 'de-DE');
+    await page.click('#tab-general');
+    await page.click('#btn-resume');
+    await page.click('#btn-play');
+    await page.locator('.mode-card[data-mode="practice"]').click();
+    await page.locator('#journey-list .mode-card[data-level="practice-easy"]').click();
+    await waitPlayActive(page);
+    const hud = (await page.textContent('#hud-progress')).trim();
+    if (hud !== 'Aufgespult 0/3') throw new Error(`HUD not German: "${hud}"`);
+    await page.click('#btn-hint');
+    await page.waitForFunction(() => /^Tipp:/.test(document.getElementById('hint-text').textContent));
+    await page.screenshot({ path: SHOT('language-de', name) });
+    await page.click('#btn-pause');
+    await page.click('#tab-graphics');
+    await choice.scrollIntoViewIfNeeded();
+    await choice.selectOption('auto');
+    await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+    if ((await page.textContent('#hud-progress')).trim() !== 'Enroulés 0/3') throw new Error('HUD not re-rendered in French');
+    if (!/^Indice :/.test(await page.textContent('#hint-text'))) throw new Error('hint not re-rendered in French');
+    await page.click('#tab-general');
+    await page.click('#btn-resume');
+    await waitPlayActive(page);
+    ok(`${name}: German round HUD, then Automatic (fr-CA) re-rendered HUD and hint mid-round`);
+  } finally {
+    await context.close();
+  }
+  if (errors.length) throw new Error(`${name} language pass had page errors:\n  ${errors.join('\n  ')}`);
+}
+
 // ---------- main ----------
 let browser = null;
 try {
@@ -347,6 +417,8 @@ try {
   await runPass(browser, 'desktop', { viewport: { width: 1280, height: 800 } }, { full: true });
   await runPass(browser, 'mobile',
     { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }, { full: false, tap: true });
+  await languagePass(browser, 'desktop-language', { viewport: { width: 1280, height: 800 } });
+  await languagePass(browser, 'mobile-language', { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   console.log('\nE2E PASS — tangled-threads, desktop + mobile, no page errors');
 } catch (e) {
   failures++;

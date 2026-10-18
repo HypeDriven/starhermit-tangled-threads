@@ -14,7 +14,7 @@ import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { THEMES, STRAND_COLORS, STRAND_COLORS_CVD } from './content.js';
-import { detectPreset, resolve, describe, SHADOW_MAP } from './gfx.js';
+import { detectLevel, presetForLevel, resolve, describe, sparkCount, SHADOW_MAP, MOTE_MAX } from './gfx.js';
 
 export const LAYER_ENV = 0;
 export const LAYER_GAME = 1;
@@ -49,12 +49,12 @@ const camBase = new THREE.Vector3();
 const camTarget = new THREE.Vector3(0, 0, 0.3);
 
 // Graphics state.
-let gpu = '', detected = 'balanced', savedGfx = {};
+let gpu = '', gpuLevel = 4, detected = 'balanced', savedGfx = {};
 let gfx = resolve({}, 'balanced');
 let composer = null, postKey = null, postFailed = false;
 let size = [0, 0], pixelRatio = 1, adaptiveScale = 1, frames = [], fps = 0;
 let envTex = null;
-const tex = {};            // procedural textures, built once
+let tex = {};              // procedural textures, built once per texture budget
 
 export function cellToWorld(level, cell) {
   const r = Math.floor(cell / level.cols), c = cell % level.cols;
@@ -105,8 +105,13 @@ function canvasTexture(w, h, fn, { color = true, repeat = [1, 1] } = {}) {
   return t;
 }
 
+// Textures are authored at 256 px (felt 128, yarn/thread 64) and sampled into the preset's texture budget.
 function textures() {
-  if (tex.wood) return tex;
+  const n = gfx.budget.texture;
+  if (tex.wood && tex.size === n) return tex;
+  for (const t of Object.values(tex)) t?.dispose?.();
+  tex = { size: n };
+  const k = n / 256, px = (w) => Math.max(16, Math.round(w * k));
   // Wood: long grain along x, growth rings warped by low-frequency noise.
   const n1 = makeNoise(11, 4, 8), n2 = makeNoise(29, 16, 64);
   const woodVal = (x, y, amt) => {
@@ -116,25 +121,28 @@ function textures() {
     const fibre = n2(u * 16, v * 64) - 0.5;
     return 1 - amt * (0.55 * Math.pow(ring, 4) + 0.45 * (0.5 + fibre));
   };
-  tex.wood = canvasTexture(256, 256, (x, y) => { const k = woodVal(x, y, 0.22); return [k, k * 0.98, k * 0.95]; });
-  tex.woodFine = canvasTexture(256, 256, (x, y) => { const k = woodVal(x, y, 0.12); return [k, k * 0.985, k * 0.965]; });
-  tex.woodBump = canvasTexture(256, 256, (x, y) => { const k = woodVal(x, y, 0.5); return [k, k, k]; }, { color: false });
+  const W = px(256), sw = (fn) => (x, y) => fn(x * 256 / W, y * 256 / W);
+  tex.wood = canvasTexture(W, W, sw((x, y) => { const v = woodVal(x, y, 0.22); return [v, v * 0.98, v * 0.95]; }));
+  tex.woodFine = canvasTexture(W, W, sw((x, y) => { const v = woodVal(x, y, 0.12); return [v, v * 0.985, v * 0.965]; }));
+  tex.woodBump = canvasTexture(W, W, sw((x, y) => { const v = woodVal(x, y, 0.5); return [v, v, v]; }), { color: false });
   // Felt: soft fibre flecks.
   const f1 = makeNoise(5, 64), f2 = makeNoise(7, 16);
   const feltVal = (x, y) => 0.86 + 0.1 * f1(x / 2, y / 2) + 0.06 * f2(x / 8, y / 8);
-  tex.felt = canvasTexture(128, 128, (x, y) => { const k = feltVal(x, y); return [k, k, k]; }, { repeat: [3, 3] });
-  tex.feltBump = canvasTexture(128, 128, (x, y) => { const k = feltVal(x, y); return [k, k, k]; }, { color: false, repeat: [3, 3] });
+  const F = px(128), sf = (fn) => (x, y) => fn(x * 128 / F, y * 128 / F);
+  tex.felt = canvasTexture(F, F, sf((x, y) => { const v = feltVal(x, y); return [v, v, v]; }), { repeat: [3, 3] });
+  tex.feltBump = canvasTexture(F, F, sf((x, y) => { const v = feltVal(x, y); return [v, v, v]; }), { color: false, repeat: [3, 3] });
   // Yarn: twisted plies — diagonal stripes; u runs along the strand, v around it.
   const yarnVal = (x, y) => {
     const s = 0.5 + 0.5 * Math.sin(((x / 64) * 2 + (y / 64) * 3) * Math.PI * 2);
     return 0.72 + 0.28 * Math.pow(s, 0.7);
   };
-  tex.yarn = canvasTexture(64, 64, (x, y) => { const k = yarnVal(x, y); return [k, k, k]; });
-  tex.yarnBump = canvasTexture(64, 64, (x, y) => { const k = yarnVal(x, y); return [k, k, k]; }, { color: false });
+  const Y = px(64), sy = (fn) => (x, y) => fn(x * 64 / Y, y * 64 / Y);
+  tex.yarn = canvasTexture(Y, Y, sy((x, y) => { const v = yarnVal(x, y); return [v, v, v]; }));
+  tex.yarnBump = canvasTexture(Y, Y, sy((x, y) => { const v = yarnVal(x, y); return [v, v, v]; }), { color: false });
   // Wound thread on a spool: fine horizontal turns with a slight lean.
   const threadVal = (x, y) => 0.78 + 0.22 * Math.pow(0.5 + 0.5 * Math.sin((y / 64 * 18 + x / 64 * 0.5) * Math.PI * 2), 0.6);
-  tex.thread = canvasTexture(64, 64, (x, y) => { const k = threadVal(x, y); return [k, k, k]; });
-  tex.threadBump = canvasTexture(64, 64, (x, y) => { const k = threadVal(x, y); return [k, k, k]; }, { color: false });
+  tex.thread = canvasTexture(Y, Y, sy((x, y) => { const v = threadVal(x, y); return [v, v, v]; }));
+  tex.threadBump = canvasTexture(Y, Y, sy((x, y) => { const v = threadVal(x, y); return [v, v, v]; }), { color: false });
   // Soft round sprite for dust motes and sparks.
   tex.dot = canvasTexture(32, 32, (x, y) => { const d = Math.hypot(x - 15.5, y - 15.5) / 16; const k = Math.max(0, 1 - d) ** 2; return [k, k, k]; }, { color: false });
   return tex;
@@ -182,7 +190,14 @@ export function initRender(canvasEl) {
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   gpu = readGpu(renderer.getContext());
-  detected = detectPreset(gpu, { mobile: isMobileDevice() });
+  // StarHermit hardware level (gpu-level.js): renderer string + device facts (phone/tablet, cores, memory).
+  let sys = { mobile: isMobileDevice(), webgl2: renderer.capabilities.isWebGL2 };
+  try {
+    const G = globalThis.StarHermitGpu;
+    if (G) { const d = G.detectSystem(); sys = { ...sys, mobile: sys.mobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, astc: d.astc }; }
+  } catch { /* defaults */ }
+  gpuLevel = detectLevel(gpu, sys);
+  detected = presetForLevel(gpuLevel);
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(FRAMING.fov, 1, 0.1, 100);
   // Layers are an authoring/picking concern: the camera draws all of them and
@@ -238,7 +253,7 @@ export function initRender(canvasEl) {
 export function setGraphics(saved) {
   savedGfx = saved || {};
   const prev = gfx;
-  gfx = resolve(savedGfx, detected);
+  gfx = resolve(savedGfx, detected, gpuLevel);
   document.body.dataset.gfxPreset = gfx.preset;
   document.body.dataset.gfxAuto = String(gfx.auto);
   if (canvas) canvas.dataset.gfxPreset = gfx.preset;
@@ -252,7 +267,10 @@ export function setGraphics(saved) {
     keyLight.shadow.map = null;
   }
   applyEnvironment();
-  if (prev.detail !== gfx.detail || prev.particles !== gfx.particles) rebuild();
+  const pb = prev.budget || {}, b = gfx.budget;
+  const assetsChanged = pb.material !== b.material || pb.texture !== b.texture || pb.bump !== b.bump || String(pb.tube) !== String(b.tube)
+    || pb.sphere !== b.sphere || pb.lathe !== b.lathe || pb.motes !== b.motes;
+  if (prev.detail !== gfx.detail || prev.particles !== gfx.particles || assetsChanged) rebuild();
   adaptiveScale = 1; frames = [];
   postKey = null; postFailed = false; // rebuild the post chain on the next frame
   fpsVisible(gfx.showFps);
@@ -263,7 +281,7 @@ export function setGraphics(saved) {
 /** What the settings panel shows: GPU, auto choice, resolved tiers, cost summary. */
 export function graphicsInfo(labels) {
   const px = [Math.round(size[0] * pixelRatio), Math.round(size[1] * pixelRatio)];
-  return { gpu, detected, resolved: gfx, summary: describe(gfx, px, labels), fps: Math.round(fps), adaptiveScale, postFailed, available: !!renderer };
+  return { gpu, level: gpuLevel, detected, resolved: gfx, summary: describe(gfx, px, labels), fps: Math.round(fps), adaptiveScale, postFailed, available: !!renderer };
 }
 
 export function getDetectedPreset() { return detected; }
@@ -422,21 +440,32 @@ function rebuild() {
   if (lastState) syncState(lastState, lastSelection);
 }
 
+// Shading model per the preset's budget: Lambert on Low, Standard on Balanced, Physical (clearcoat, sheen)
+// on High/Ultra. `extras` are the Physical-only parameters; without them Standard is enough. Bump maps
+// only where the budget allows them. Colours, emission (selection glow) and opacity are kept on every model.
+const LAMBERT_KEYS = new Set(['color', 'map', 'emissive', 'emissiveIntensity', 'transparent', 'opacity']);
+function surface(params, extras = null) {
+  const tier = gfx.budget.material, p = { ...params };
+  if (!gfx.budget.bump) { delete p.bumpMap; delete p.bumpScale; }
+  if (tier === 'lambert') return new THREE.MeshLambertMaterial(Object.fromEntries(Object.entries(p).filter(([k]) => LAMBERT_KEYS.has(k))));
+  if (tier === 'standard' || !extras) return new THREE.MeshStandardMaterial(p);
+  return new THREE.MeshPhysicalMaterial({ ...p, ...extras });
+}
+const sphereGeo = (r, k = 1) => new THREE.SphereGeometry(r, Math.round(gfx.budget.sphere * k), Math.round(gfx.budget.sphere * k * 0.75));
+
 function beadMaterial(color, emissive) {
   const params = { color, roughness: 0.4, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive ? 0.15 : 1 };
-  if (!detailed()) return new THREE.MeshStandardMaterial(params);
+  if (!detailed()) return surface(params);
   // Glossy lacquered wooden bead.
-  return new THREE.MeshPhysicalMaterial({ ...params, roughness: 0.48, clearcoat: 0.6, clearcoatRoughness: 0.4 });
+  return surface({ ...params, roughness: 0.48 }, { clearcoat: 0.6, clearcoatRoughness: 0.4 });
 }
 
 function strandMaterial(color) {
-  if (!detailed()) return new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+  if (!detailed()) return surface({ color, roughness: 0.5 });
   const t = textures();
   // Soft yarn: twisted-ply texture plus a fibre sheen at grazing angles.
-  return new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.78, map: t.yarn, bumpMap: t.yarnBump, bumpScale: 1.4,
-    sheen: 0.8, sheenRoughness: 0.45, sheenColor: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.3),
-  });
+  return surface({ color, roughness: 0.78, map: t.yarn, bumpMap: t.yarnBump, bumpScale: 1.4 },
+    { sheen: 0.8, sheenRoughness: 0.45, sheenColor: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.3) });
 }
 
 function tableMap(t) {
@@ -445,12 +474,12 @@ function tableMap(t) {
 }
 
 function makeSpool(color) {
-  const g = new THREE.Group();
+  const g = new THREE.Group(), seg = gfx.budget.lathe;
   if (!detailed()) {
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.55, 24), new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.6 }));
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.55, seg), surface({ color: 0x8a6a48, roughness: 0.6 }));
     body.castShadow = true;
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.315, 0.315, 0.3, 24), new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 24), new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.6 }));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.315, 0.315, 0.3, seg), surface({ color, roughness: 0.55 }));
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, seg), surface({ color: 0x6b4a2f, roughness: 0.6 }));
     cap.position.y = 0.3;
     g.add(body, band, cap);
     return g;
@@ -459,16 +488,16 @@ function makeSpool(color) {
   // Turned wooden bobbin: flanged lathe profile, with wound thread in the waist.
   const prof = [[0, -0.3], [0.37, -0.3], [0.39, -0.27], [0.37, -0.22], [0.25, -0.2], [0.24, 0.2], [0.37, 0.22], [0.39, 0.27], [0.37, 0.3], [0.1, 0.31], [0.08, 0.26], [0, 0.26]]
     .map(([x, y]) => new THREE.Vector2(x, y));
-  const wood = new THREE.MeshPhysicalMaterial({ color: 0x9a7650, roughness: 0.5, map: t.wood, clearcoat: 0.5, clearcoatRoughness: 0.35 });
-  const body = new THREE.Mesh(new THREE.LatheGeometry(prof, 32), wood);
+  const wood = surface({ color: 0x9a7650, roughness: 0.5, map: t.wood }, { clearcoat: 0.5, clearcoatRoughness: 0.35 });
+  const body = new THREE.Mesh(new THREE.LatheGeometry(prof, seg), wood);
   body.castShadow = true; body.receiveShadow = true;
   const band = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.325, 0.325, 0.4, 32, 1, true),
-    new THREE.MeshPhysicalMaterial({ color, roughness: 0.7, map: t.thread, bumpMap: t.threadBump, bumpScale: 1.2, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(color) })
+    new THREE.CylinderGeometry(0.325, 0.325, 0.4, seg, 1, true),
+    surface({ color, roughness: 0.7, map: t.thread, bumpMap: t.threadBump, bumpScale: 1.2 }, { sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(color) })
   );
   band.castShadow = true;
   // Coloured label disc on top so the spool's colour reads from the playing angle.
-  const label = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.02, 28), new THREE.MeshPhysicalMaterial({ color, roughness: 0.45, clearcoat: 0.6 }));
+  const label = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.02, Math.round(seg * 0.875)), surface({ color, roughness: 0.45 }, { clearcoat: 0.6 }));
   label.position.y = 0.305;
   g.add(body, band, label);
   return g;
@@ -479,22 +508,23 @@ function addProps(level) {
   const env = (m) => { m.layers.set(LAYER_ENV); m.castShadow = true; m.receiveShadow = true; world.add(m); return m; };
   // Needle cushion.
   const cushionMat = detailed()
-    ? new THREE.MeshPhysicalMaterial({ color: 0xa03040, roughness: 0.9, map: textures().felt, sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xff9aa8) })
-    : new THREE.MeshStandardMaterial({ color: 0xa03040, roughness: 0.9 });
-  const cushion = env(new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), cushionMat));
+    ? surface({ color: 0xa03040, roughness: 0.9, map: textures().felt }, { sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xff9aa8) })
+    : surface({ color: 0xa03040, roughness: 0.9 });
+  const cs = gfx.budget.sphere;
+  const cushion = env(new THREE.Mesh(new THREE.SphereGeometry(0.5, cs, Math.round(cs * 0.67), 0, Math.PI * 2, 0, Math.PI / 2), cushionMat));
   cushion.position.set(hx + 1.2, -0.1, -hz - 0.6);
   if (!detailed()) return;
   const t = textures();
   // Pins in the cushion.
   const r = rng(level.cols * 131 + level.rows);
   const pinHeads = [0xe8b54a, 0xf5efe6, 0x2878d6, 0x32aa3c, 0xd62828];
-  const shaft = new THREE.MeshStandardMaterial({ color: 0xcfd3d8, metalness: 1, roughness: 0.25 });
+  const shaft = surface({ color: 0xcfd3d8, metalness: 1, roughness: 0.25 });
   for (let i = 0; i < 6; i++) {
     const a = r() * Math.PI * 2, tilt = 0.25 + r() * 0.5;
     const pin = new THREE.Group();
     const s = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.45, 6), shaft);
     s.position.y = 0.22;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshPhysicalMaterial({ color: pinHeads[i % pinHeads.length], roughness: 0.25, clearcoat: 1 }));
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), surface({ color: pinHeads[i % pinHeads.length], roughness: 0.25 }, { clearcoat: 1 }));
     head.position.y = 0.45;
     pin.add(s, head);
     pin.traverse((o) => { o.layers.set(LAYER_ENV); o.castShadow = true; });
@@ -504,12 +534,13 @@ function addProps(level) {
   }
   // Brass thimble.
   const thimProf = [[0.2, -0.02], [0.22, -0.02], [0.21, 0], [0.19, 0.15], [0.17, 0.27], [0.12, 0.31], [0, 0.32]].map(([x, y]) => new THREE.Vector2(x, y));
-  const thimble = env(new THREE.Mesh(new THREE.LatheGeometry(thimProf, 28), new THREE.MeshStandardMaterial({ color: 0xd8b26a, metalness: 1, roughness: 0.3, bumpMap: t.feltBump, bumpScale: 2 })));
+  const thimble = env(new THREE.Mesh(new THREE.LatheGeometry(thimProf, Math.round(gfx.budget.lathe * 0.875)), surface({ color: 0xd8b26a, metalness: 1, roughness: 0.3, bumpMap: t.feltBump, bumpScale: 2 })));
   thimble.position.set(-hx - 1.1, -0.08, hz + 0.3);
   // Ball of spare yarn.
-  const ball = env(new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 20), new THREE.MeshPhysicalMaterial({
-    color: 0x6f8fb8, roughness: 0.85, map: t.thread, bumpMap: t.threadBump, bumpScale: 2, sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xcfe0ff),
-  })));
+  const ball = env(new THREE.Mesh(sphereGeo(0.42, 1.33), surface(
+    { color: 0x6f8fb8, roughness: 0.85, map: t.thread, bumpMap: t.threadBump, bumpScale: 2 },
+    { sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xcfe0ff) },
+  )));
   ball.rotation.set(0.6, 0.3, 0.9);
   ball.position.set(-hx - 1.3, 0.3, -hz + 0.4);
   // Running stitch around the felt pad.
@@ -518,7 +549,7 @@ function addProps(level) {
   const ex = hx + 0.25, ez = hz + 0.25;
   for (let x = -ex + 0.1; x <= ex - 0.1; x += 0.3) { perim.push([x, -ez, 0], [x, ez, 0]); }
   for (let z = -ez + 0.1; z <= ez - 0.1; z += 0.3) { perim.push([-ex, z, Math.PI / 2], [ex, z, Math.PI / 2]); }
-  const stitches = new THREE.InstancedMesh(stitch, new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.cloth).lerp(new THREE.Color(0xe8d5b0), 0.45), roughness: 0.9 }), perim.length);
+  const stitches = new THREE.InstancedMesh(stitch, surface({ color: new THREE.Color(theme.cloth).lerp(new THREE.Color(0xe8d5b0), 0.45), roughness: 0.9 }), perim.length);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
   perim.forEach(([x, z, rot], i) => stitches.setMatrixAt(i, m4.compose(new THREE.Vector3(x, -0.015, z), q.setFromAxisAngle(up, rot), one)));
   stitches.layers.set(LAYER_ENV);
@@ -528,7 +559,7 @@ function addProps(level) {
 
 function buildMotes(level) {
   if (gfx.particles !== 'high') return;
-  const n = 90, r = rng(77);
+  const n = Math.min(MOTE_MAX, gfx.budget.motes), r = rng(77);
   const pos = new Float32Array(n * 3);
   const span = Math.max(level.cols, level.rows) * CELL + 2;
   for (let i = 0; i < n; i++) { pos[i * 3] = (r() - 0.5) * span; pos[i * 3 + 1] = 0.3 + r() * 3.2; pos[i * 3 + 2] = (r() - 0.5) * span; }
@@ -570,8 +601,8 @@ export function buildLevel(level, opts = {}) {
   const table = new THREE.Mesh(
     new THREE.BoxGeometry(tableSize, 0.5, tableSize),
     detailed()
-      ? new THREE.MeshStandardMaterial({ color: theme.table, roughness: 0.62, metalness: 0.02, map: tableMap(t), bumpMap: t.woodBump, bumpScale: 1 })
-      : new THREE.MeshStandardMaterial({ color: theme.table, roughness: 0.75, metalness: 0.05 })
+      ? surface({ color: theme.table, roughness: 0.62, metalness: 0.02, map: tableMap(t), bumpMap: t.woodBump, bumpScale: 1 })
+      : surface({ color: theme.table, roughness: 0.75, metalness: 0.05 })
   );
   table.position.y = -0.35;
   table.receiveShadow = true;
@@ -582,8 +613,8 @@ export function buildLevel(level, opts = {}) {
   const pad = new THREE.Mesh(
     new THREE.BoxGeometry(level.cols * CELL + 0.7, 0.08, level.rows * CELL + 0.7),
     detailed()
-      ? new THREE.MeshPhysicalMaterial({ color: theme.cloth, roughness: 1, map: t.felt, bumpMap: t.feltBump, bumpScale: 2, sheen: 1, sheenRoughness: 0.6, sheenColor: new THREE.Color(theme.cloth).multiplyScalar(2.2) })
-      : new THREE.MeshStandardMaterial({ color: theme.cloth, roughness: 1 })
+      ? surface({ color: theme.cloth, roughness: 1, map: t.felt, bumpMap: t.feltBump, bumpScale: 2 }, { sheen: 1, sheenRoughness: 0.6, sheenColor: new THREE.Color(theme.cloth).multiplyScalar(2.2) })
+      : surface({ color: theme.cloth, roughness: 1 })
   );
   pad.position.y = -0.06;
   pad.receiveShadow = true;
@@ -595,9 +626,9 @@ export function buildLevel(level, opts = {}) {
     ? new RoundedBoxGeometry(CELL * 0.94, 0.12, CELL * 0.94, 2, 0.035)
     : new THREE.BoxGeometry(CELL * 0.94, 0.12, CELL * 0.94);
   const cellMat = (color, ox) => {
-    if (!detailed()) return new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+    if (!detailed()) return surface({ color, roughness: 0.9 });
     const map = t.woodFine.clone(); map.offset.set(ox, ox * 0.37);
-    return new THREE.MeshStandardMaterial({ color, roughness: 0.72, map, bumpMap: t.woodBump, bumpScale: 0.5 });
+    return surface({ color, roughness: 0.72, map, bumpMap: t.woodBump, bumpScale: 0.5 });
   };
   const matA = cellMat(theme.boardA, 0.13), matB = cellMat(theme.boardB, 0.61);
   for (let cell = 0; cell < level.cols * level.rows; cell++) {
@@ -626,13 +657,13 @@ export function buildLevel(level, opts = {}) {
   level.strands.forEach((s, i) => {
     const g = new THREE.Group();
     g.userData = { strand: i };
-    const anchor = new THREE.Mesh(new THREE.SphereGeometry(0.26, 24, 18), beadMaterial(strandColor(s.color), false));
-    anchor.material.roughness = detailed() ? 0.5 : 0.45;
+    const anchor = new THREE.Mesh(sphereGeo(0.26), beadMaterial(strandColor(s.color), false));
+    if ('roughness' in anchor.material) anchor.material.roughness = detailed() ? 0.5 : 0.45;
     anchor.castShadow = true;
     anchor.userData = { strand: i, anchor: true };
     anchor.layers.set(LAYER_GAME);
     g.add(anchor);
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 18), beadMaterial(strandColor(s.color), true));
+    const tip = new THREE.Mesh(sphereGeo(0.24), beadMaterial(strandColor(s.color), true));
     tip.castShadow = true;
     tip.userData = { strand: i, tip: true };
     tip.layers.set(LAYER_GAME);
@@ -690,8 +721,9 @@ export function syncState(state, selection = -1) {
     anchor.position.y += lift; tip.position.y += lift;
     if (pts.length >= 2 && !s.done) {
       const curve = new THREE.CatmullRomCurve3(pts.map((p) => p.clone().add(new THREE.Vector3(0, lift, 0))));
-      const segs = Math.max(8, pts.length * (detailed() ? 10 : 6));
-      const geo = new THREE.TubeGeometry(curve, segs, STRAND_R, detailed() ? 14 : 10, false);
+      const [radial, perCell] = gfx.budget.tube;
+      const segs = Math.max(8, pts.length * perCell);
+      const geo = new THREE.TubeGeometry(curve, segs, STRAND_R, radial, false);
       // Stretch the yarn texture so the twist keeps a constant pitch along the strand.
       const uv = geo.attributes.uv, len = curve.getLength() * 2.2;
       for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * len);
@@ -732,7 +764,7 @@ export function shake(amount) { if (!reducedMotion) shakeAmp = Math.min(0.15, am
 let sparkGeo = null;
 export function burstAt(worldPos, colorIdx) {
   if (!world || reducedMotion || gfx.particles === 'off') return;
-  const n = gfx.particles === 'low' ? 8 : 16;
+  const n = sparkCount(gfx);
   sparkGeo ||= new THREE.SphereGeometry(0.05, 6, 6);
   for (let i = 0; i < n; i++) {
     // Over-bright sparks so they (and only they) catch the bloom at the reel moment.
@@ -816,8 +848,17 @@ const GradeShader = {
     }`,
 };
 
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+  if (!(k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
 function makePostKey(w, h) {
-  return gfx.post ? [gfx.ao, gfx.bloom, gfx.grade, gfx.antialias, w, h, pixelRatio].join('|') : 'none';
+  return gfx.post ? [gfx.ao, gfx.bloom, gfx.grade, gfx.antialias, gfx.budget.bloomRes, gfx.budget.aoRes, w, h, pixelRatio].join('|') : 'none';
 }
 
 function buildPost(w, h) {
@@ -838,10 +879,10 @@ function buildPost(w, h) {
       ao.blendIntensity = gfx.ao === 'high' ? 0.85 : 0.7;
       ao.updateGtaoMaterial({ radius: 0.5, distanceExponent: 1.5, thickness: 1.0, scale: 1.0, samples: gfx.ao === 'high' ? 16 : 8 });
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: gfx.ao === 'high' ? 6 : 4, rings: 2, samples: gfx.ao === 'high' ? 16 : 8 });
-      c.addPass(ao);
+      c.addPass(atScale(ao, gfx.budget.aoRes));
     }
     // High threshold: only the selected tip, reel sparks and hot highlights bloom.
-    if (gfx.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.45, 0.88));
+    if (gfx.bloom === 'on') c.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.45, 0.88), gfx.budget.bloomRes));
     c.addPass(new OutputPass());
     if (gfx.grade === 'on') c.addPass(new ShaderPass(GradeShader));
     if (gfx.antialias === 'smaa') c.addPass(new SMAAPass());

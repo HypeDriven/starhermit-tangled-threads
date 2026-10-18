@@ -17,7 +17,7 @@ const en = {
   },
   adaptive: 'Adaptive resolution', showFps: 'Show frame rate',
   postFailed: 'Post-processing is unavailable on this device; the game renders without it.',
-  unknownGpu: 'unknown GPU',
+  unknownGpu: 'unknown GPU', level: 'Level {n}',
   summary: {
     noShadows: 'no shadows', shadows: '{n}² shadows', ao: 'ambient occlusion', aoHigh: 'full ambient occlusion',
     bloom: 'bloom', reflections: 'reflections', noAA: 'no anti-aliasing', px: '{w}×{h} px',
@@ -45,7 +45,7 @@ const es419 = {
   },
   adaptive: 'Resolución adaptativa', showFps: 'Mostrar cuadros por segundo',
   postFailed: 'El posprocesado no está disponible en este dispositivo; el juego se muestra sin él.',
-  unknownGpu: 'GPU desconocida',
+  unknownGpu: 'GPU desconocida', level: 'Nivel {n}',
   summary: {
     noShadows: 'sin sombras', shadows: 'sombras {n}²', ao: 'oclusión ambiental', aoHigh: 'oclusión ambiental completa',
     bloom: 'resplandor', reflections: 'reflejos', noAA: 'sin antialiasing', px: '{w}×{h} px',
@@ -74,7 +74,7 @@ const de = {
   },
   adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
   postFailed: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar; das Spiel wird ohne sie dargestellt.',
-  unknownGpu: 'unbekannte GPU',
+  unknownGpu: 'unbekannte GPU', level: 'Stufe {n}',
   summary: {
     noShadows: 'keine Schatten', shadows: '{n}²-Schatten', ao: 'Umgebungsverdeckung', aoHigh: 'volle Umgebungsverdeckung',
     bloom: 'Leuchteffekt', reflections: 'Spiegelungen', noAA: 'keine Kantenglättung', px: '{w}×{h} px',
@@ -97,7 +97,7 @@ const fr = {
   },
   adaptive: 'Résolution adaptative', showFps: 'Afficher la fréquence d’images',
   postFailed: 'Le post-traitement est indisponible sur cet appareil ; le jeu s’affiche sans lui.',
-  unknownGpu: 'GPU inconnu',
+  unknownGpu: 'GPU inconnu', level: 'Niveau {n}',
   summary: {
     noShadows: 'sans ombres', shadows: 'ombres {n}²', ao: 'occlusion ambiante', aoHigh: 'occlusion ambiante complète',
     bloom: 'halo', reflections: 'reflets', noAA: 'sans anticrénelage', px: '{w}×{h} px',
@@ -126,7 +126,7 @@ const ptBR = {
   },
   adaptive: 'Resolução adaptativa', showFps: 'Mostrar taxa de quadros',
   postFailed: 'O pós-processamento não está disponível neste dispositivo; o jogo é exibido sem ele.',
-  unknownGpu: 'GPU desconhecida',
+  unknownGpu: 'GPU desconhecida', level: 'Nível {n}',
   summary: {
     noShadows: 'sem sombras', shadows: 'sombras {n}²', ao: 'oclusão ambiente', aoHigh: 'oclusão ambiente completa',
     bloom: 'brilho', reflections: 'reflexos', noAA: 'sem antisserrilhamento', px: '{w}×{h} px',
@@ -149,7 +149,7 @@ const it = {
   },
   adaptive: 'Risoluzione adattiva', showFps: 'Mostra frame rate',
   postFailed: 'La post-elaborazione non è disponibile su questo dispositivo; il gioco viene mostrato senza.',
-  unknownGpu: 'GPU sconosciuta',
+  unknownGpu: 'GPU sconosciuta', level: 'Livello {n}',
   summary: {
     noShadows: 'senza ombre', shadows: 'ombre {n}²', ao: 'occlusione ambientale', aoHigh: 'occlusione ambientale completa',
     bloom: 'bagliore', reflections: 'riflessi', noAA: 'senza antialiasing', px: '{w}×{h} px',

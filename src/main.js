@@ -230,7 +230,7 @@ function renderGfxPanel() {
   }
   $('gfx-adaptive').checked = g.adaptive !== false;
   $('gfx-fps').checked = !!g.show_fps;
-  $('gfx-summary').textContent = [info.gpu || GT.unknownGpu, info.summary].join(' · ');
+  $('gfx-summary').textContent = [info.gpu || GT.unknownGpu, info.level != null ? GT.level.replace('{n}', info.level) : null, info.summary].filter(Boolean).join(' · ');
   $('gfx-post-note').hidden = !info.postFailed;
 }
 

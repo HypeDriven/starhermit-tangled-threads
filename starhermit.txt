@@ -1,16 +1,49 @@
 name=Tangled Threads
 description=Route colored strands without crossings and reel each one into its matching spool.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.21.0
+engine.minor=23
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard actions (players rebind keys and pads in the runtime's Options).
+# The board is also played with the pointer or a finger: tap a strand to
+# select it, then tap or drag through empty neighbouring cells; tap the cell
+# behind the tip to pull back; tap the matching spool to reel. The board
+# mirror (top left) is a button per cell for keyboard focus and screen readers.
+engine.group.left=Board cursor
 control.left=ArrowLeft | Cursor left
 control.right=ArrowRight | Cursor right
 control.up=ArrowUp | Cursor up
 control.down=ArrowDown | Cursor down
 control.select=Enter+Space | Select / extend
+engine.group.reel=Round
 control.reel=KeyR | Reel strand
 control.undo=KeyU | Undo
 control.hint=KeyH | Hint
 control.pause=Escape | Pause
 control.camera=KeyC | Reset camera
+
+# Gamepad defaults (the browser build had none): the D-pad or left stick moves
+# the cursor, South selects / extends, East reels, West undoes, North asks for
+# a hint, Start pauses, the right stick press resets the camera.
+engine.gamepad.left=DpadLeft+LeftStickLeft
+engine.gamepad.right=DpadRight+LeftStickRight
+engine.gamepad.up=DpadUp+LeftStickUp
+engine.gamepad.down=DpadDown+LeftStickDown
+engine.gamepad.select=South
+engine.gamepad.reel=East
+engine.gamepad.undo=West
+engine.gamepad.hint=North
+engine.gamepad.pause=Start
+engine.gamepad.camera=RightStickPress

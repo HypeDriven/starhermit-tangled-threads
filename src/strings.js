@@ -104,6 +104,8 @@ const enUS = {
   cmpBest: ' Your best on this board: {best}.',
   cmpOffline: 'Offline — score kept locally.',
   playerFallback: 'Player {id}',
+  optRuntime: 'Volumes, graphics, language, larger text, high contrast, reduced motion and vibration are in the StarHermit Options.',
+  openOptions: 'Open Options', keyBindings: 'Key bindings',
 };
 
 const enGB = {
@@ -218,6 +220,8 @@ const es419 = {
   cmpBest: ' Tu mejor marca en este tablero: {best}.',
   cmpOffline: 'Sin conexión: la puntuación se guarda en el dispositivo.',
   playerFallback: 'Jugador {id}',
+  optRuntime: 'El volumen, los gráficos, el idioma, el texto más grande, el alto contraste, el movimiento reducido y la vibración están en las Opciones de StarHermit.',
+  openOptions: 'Abrir Opciones', keyBindings: 'Asignación de teclas',
 };
 
 const esES = {
@@ -328,6 +332,8 @@ const deDE = {
   cmpBest: ' Dein Bestwert auf diesem Brett: {best}.',
   cmpOffline: 'Offline – Punktzahl bleibt lokal.',
   playerFallback: 'Spieler {id}',
+  optRuntime: 'Lautstärke, Grafik, Sprache, größere Schrift, hoher Kontrast, reduzierte Bewegung und Vibration findest du in den StarHermit-Optionen.',
+  openOptions: 'Optionen öffnen', keyBindings: 'Tastenbelegung',
 };
 
 const frFR = {
@@ -431,6 +437,8 @@ const frFR = {
   cmpBest: ' Votre record sur ce plateau : {best}.',
   cmpOffline: 'Hors ligne — score conservé sur l’appareil.',
   playerFallback: 'Joueur {id}',
+  optRuntime: 'Le volume, les graphismes, la langue, le texte agrandi, le contraste élevé, les animations réduites et la vibration se trouvent dans les Options StarHermit.',
+  openOptions: 'Ouvrir les Options', keyBindings: 'Touches',
 };
 
 const frCA = {
@@ -546,6 +554,8 @@ const ptBR = {
   cmpBest: ' Seu recorde neste tabuleiro: {best}.',
   cmpOffline: 'Offline — pontuação mantida no dispositivo.',
   playerFallback: 'Jogador {id}',
+  optRuntime: 'Volume, gráficos, idioma, texto maior, alto contraste, movimento reduzido e vibração ficam nas Opções do StarHermit.',
+  openOptions: 'Abrir Opções', keyBindings: 'Atalhos de teclado',
 };
 
 const itIT = {
@@ -649,6 +659,8 @@ const itIT = {
   cmpBest: ' Il tuo record su questa tavola: {best}.',
   cmpOffline: 'Offline: punteggio conservato sul dispositivo.',
   playerFallback: 'Giocatore {id}',
+  optRuntime: 'Volume, grafica, lingua, testo più grande, contrasto elevato, movimento ridotto e vibrazione si trovano nelle Opzioni di StarHermit.',
+  openOptions: 'Apri Opzioni', keyBindings: 'Assegnazione tasti',
 };
 
 export const STRINGS = {

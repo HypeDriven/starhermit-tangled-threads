@@ -1,0 +1,90 @@
+/* Tangled Threads — the browser build's index.html <style> rewritten
+   class-based for the engine's UI (`npm run css` converts it into
+   assets/ui-style.json). Element selectors, ids, body classes (high-contrast,
+   text-large, left-handed, webgl-3d) and @media do not convert: every widget
+   names its classes, the breakpoints are layouts picked in native/screens.ts,
+   high contrast is the token set native/style.ts applies, larger text is the
+   runtime's text scale, and the left-handed tray is the game's option. */
+
+:root {
+  --bg: #2b2320; --panel: rgba(20, 14, 10, 0.82); --panel-border: #6b5540;
+  --text: #f5efe6; --accent: #e8b54a; --accent-text: #241d18;
+  --pill: #3a2f28; --focus: #ffffff; --head: #ffe9c0; --secondary: #6f6a63;
+}
+
+* { box-sizing: border-box; }
+
+/* ------------------------------------------------------------- text */
+.text { color: var(--text); font-size: 16px; }
+.dim { color: var(--text); font-size: 15px; opacity: 0.85; }
+.tagline { color: var(--text); font-size: 17px; text-align: center; }
+.tagline-l { color: var(--text); font-size: 17px; }
+.small { color: var(--text); font-size: 13.6px; }
+.title-h { color: #ffffff; font-size: 56px; font-weight: 700; letter-spacing: 6.7px; text-align: center;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); }
+.h2 { color: var(--head); font-size: 26px; font-weight: 700; }
+.h2c { color: var(--head); font-size: 26px; font-weight: 700; text-align: center; }
+.card-h { color: var(--head); font-size: 16px; font-weight: 700; }
+.mode-name { color: var(--head); font-size: 17.6px; font-weight: 700; }
+.mode-desc { color: var(--text); font-size: 14px; opacity: 0.85; }
+.pill-text { color: var(--head); font-size: 16px; font-weight: 700; }
+.hint-pill-text { color: var(--head); font-size: 16px; font-weight: 700; text-align: center; }
+.mirror-cap { color: var(--text); font-size: 12.8px; opacity: 0.8; text-align: center; }
+.score-k { color: var(--text); font-size: 16px; }
+.score-v { color: var(--text); font-size: 16px; font-weight: 700; text-align: end; }
+.total-k { color: var(--accent); font-size: 19.2px; }
+.total-v { color: var(--accent); font-size: 19.2px; font-weight: 700; text-align: end; }
+.toast-text { color: var(--text); font-size: 16px; text-align: center; }
+.wrap { color: var(--head); font-size: 14.4px; font-weight: 700; text-align: center; }
+.wrap-ink { color: var(--accent-text); font-size: 16.8px; font-weight: 700; text-align: center; }
+
+/* ------------------------------------------------------------- surfaces */
+.panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 16px; padding: 20px 24px; }
+.pill { background: var(--pill); border: 1px solid var(--panel-border); border-radius: 999px; padding: 7px 16px; }
+.mirror { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 11px; padding: 8px 10px; }
+.rule-card { background: rgba(255, 255, 255, 0.06); border-radius: 11px; padding: 13px 16px; }
+.score-row { border-bottom: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; padding: 6px 8px; }
+.setting-row { border-bottom: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0; padding: 8px 0; }
+.toast { background: var(--panel); border: 1px solid var(--accent); border-radius: 13px; padding: 10px 18px; }
+.scrim { background: rgba(20, 14, 10, 0.45); border-radius: 0; }
+
+/* ------------------------------------------------------------- buttons (.ui-btn) */
+.btn {
+  min-height: 44px; min-width: 44px; padding: 10px 24px;
+  background: var(--accent); border: 2px solid var(--accent); border-radius: 999px;
+  color: var(--accent-text); font-size: 16.8px; font-weight: 700; text-align: center;
+}
+.btn:hover { background: #f2c76a; border-color: #f2c76a; }
+.btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; }
+.btn-secondary {
+  min-height: 44px; min-width: 44px; padding: 10px 24px;
+  background: var(--secondary); border: 2px solid var(--secondary); border-radius: 999px;
+  color: #ffffff; font-size: 16.8px; font-weight: 700; text-align: center;
+}
+.btn-secondary:hover { background: #827c74; border-color: #827c74; }
+.btn-secondary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn-ghost {
+  min-height: 44px; min-width: 44px; padding: 10px 24px;
+  background: transparent; border: 2px solid var(--accent); border-radius: 999px;
+  color: var(--head); font-size: 16.8px; font-weight: 700; text-align: center;
+}
+.btn-ghost:hover { background: rgba(232, 181, 74, 0.18); }
+.btn-ghost:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn-ghost:disabled { opacity: 0.45; }
+.btn-small {
+  min-height: 44px; min-width: 44px; padding: 6px 16px;
+  background: rgba(20, 14, 10, 0.55); border: 2px solid var(--accent); border-radius: 999px;
+  color: var(--head); font-size: 14.4px; font-weight: 700; text-align: center;
+}
+.btn-small:hover { background: rgba(232, 181, 74, 0.25); }
+.btn-small:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn-small:disabled { opacity: 0.45; }
+.btn-card {
+  min-height: 44px; padding: 16px;
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px;
+  color: var(--text); font-size: 16px; text-align: start;
+}
+.btn-card:hover { border-color: var(--accent); }
+.btn-card:focus-visible { border-color: var(--accent); outline: 3px solid var(--focus); outline-offset: 2px; }
+.btn-card.active { border-color: var(--accent); }

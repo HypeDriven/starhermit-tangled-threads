@@ -40,6 +40,47 @@ export function isValidLevelId(id) {
   return false;
 }
 
+/**
+ * Array.prototype.sort as V8 runs it on these short arrays, comparator call
+ * for comparator call. The generator shuffles with a random comparator, so a
+ * level depends on the sort's exact calls. Chrome 156 (measured) sorts them
+ * by binary insertion from the second element (v8Sort; most of the browser
+ * build's levels, and every level of a fresh page), Node's V8 counts a
+ * natural run first (v8RunSort), and the StarHermit runtime's interpreter
+ * sorts otherwise; so the generator names its sort and every engine makes
+ * the same levels.
+ */
+export function v8Sort(a, cmp) {
+  const n = a.length;
+  for (let start = 1; start < n; start++) binaryInsert(a, cmp, start);
+  return a;
+}
+function binaryInsert(a, cmp, start) {
+  let left = 0, right = start;
+  const pivot = a[start];
+  while (left < right) {
+    const mid = left + ((right - left) >> 1);
+    if (cmp(pivot, a[mid]) < 0) right = mid; else left = mid + 1;
+  }
+  for (let p = start; p > left; p--) a[p] = a[p - 1];
+  a[left] = pivot;
+}
+/** Node's V8 (13.6) for arrays shorter than 64: CountAndMakeRun, then binary insertion. */
+export function v8RunSort(a, cmp) {
+  const n = a.length;
+  if (n < 2) return a;
+  let run = 2;
+  const desc = cmp(a[1], a[0]) < 0;
+  for (let i = 2; i < n; i++) {
+    const o = cmp(a[i], a[i - 1]);
+    if (desc ? o >= 0 : o < 0) break;
+    run++;
+  }
+  if (desc) for (let i = 0, j = run - 1; i < j; i++, j--) { const t = a[i]; a[i] = a[j]; a[j] = t; }
+  for (let start = run; start < n; start++) binaryInsert(a, cmp, start);
+  return a;
+}
+
 /* ---------------- generator ---------------- */
 
 function paramsFor(id) {
@@ -91,13 +132,19 @@ export function generateLevel(id) {
   if (!isValidLevelId(id)) throw new Error('unknown level id: ' + id);
   // Retry salted seeds until every strand gets a real path (length >= 2).
   for (let attempt = 0; attempt < 64; attempt++) {
-    const level = tryGenerate(id, attempt);
+    const level = tryGenerate(id, attempt, v8Sort);
+    if (level) return level;
+  }
+  // A few ids (Challenge 11 and some Daily dates) have no board with Chrome's sort in 64 salts (the
+  // browser build threw there): those take the first board Node's sort gives, as its server did.
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const level = tryGenerate(id, attempt, v8RunSort);
     if (level) return level;
   }
   throw new Error('could not generate level: ' + id);
 }
 
-function tryGenerate(id, attempt) {
+function tryGenerate(id, attempt, sort) {
   const p = paramsFor(id);
   const rng = mulberry32(seedFromString('level-v' + CONTENT_VERSION + '-' + id + '-' + attempt));
 
@@ -119,7 +166,7 @@ function tryGenerate(id, attempt) {
   }
 
   // Grow a solution path for each strand, longest-target first.
-  const order = spools.map((_, i) => i).sort(() => rng() - 0.5);
+  const order = sort(spools.map((_, i) => i), () => rng() - 0.5);
   const solutions = new Array(p.count).fill(null);
   for (const i of order) {
     const target = Math.max(1, Math.round(p.minLen + rng() * (p.maxLen - p.minLen)));

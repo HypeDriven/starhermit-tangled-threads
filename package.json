@@ -1,21 +1,22 @@
 {
   "name": "tangled-threads",
   "version": "1.0.0",
+  "description": "Tangled Threads — route coloured strands without crossings and reel each into its spool. A routing puzzle on the StarHermit engine.",
   "private": true,
+  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "test": "vitest run",
-    "check": "node --check server.js && node --check src/rules.js && node --check src/content.js && node --check src/session.js && node --check src/audio.js && node --check src/ui.js && node --check src/platform.js && node --check src/main.js && node --check src/render.js && node --check src/gfx.js && node --check src/gfx-i18n.js",
-    "smoke": "node tests/hosted-smoke.mjs",
-    "test:e2e": "node tests/e2e.mjs"
-  },
-  "dependencies": {
-    "three": "^0.185.1"
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node --test tests/rules.test.js tests/save.test.mjs tests/i18n.test.mjs tests/server.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "start": "node server.cjs",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "textures": "node tools/bake-textures.mjs",
+    "plays": "node tools/gen-plays.mjs"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
-    "playwright-core": "^1.63.0",
-    "vitest": "^4.1.11"
+    "playwright-core": "^1.63.0"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
 }

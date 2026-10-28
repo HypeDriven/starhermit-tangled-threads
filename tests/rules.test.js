@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from './expect.mjs';
 import {
   createGame, checkAction, applyAction, legalActions, scoreState, hashState,
   serialize, deserialize, replay, mulberry32, seedFromString, compareResults, isTerminal,

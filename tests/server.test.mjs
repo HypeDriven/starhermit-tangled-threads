@@ -1,12 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from './expect.mjs';
+import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 
 let proc;
-let port = 18123;
+let port = 0;
 const base = () => `http://127.0.0.1:${port}`;
 
 beforeAll(async () => {
-  proc = spawn('node', ['server.js'], {
+  port = await new Promise((r) => { const s = createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
+  proc = spawn('node', ['server.cjs'], {
     env: { ...process.env, PORT: String(port), TT_DATA_DIR: `/tmp/tt-test-data-${process.pid}` },
     stdio: 'ignore',
   });
@@ -15,7 +17,7 @@ beforeAll(async () => {
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('server did not start');
-}, 15000);
+});
 
 afterAll(() => { proc?.kill(); });
 
@@ -25,8 +27,8 @@ describe('server smoke', () => {
     expect(idx.status).toBe(200);
     const html = await idx.text();
     expect(html).toContain('Tangled Threads');
-    expect(html).toContain('./src/main.js');
-    for (const p of ['/src/main.js', '/src/rules.js', '/src/render.js', '/src/ui.js', '/src/audio.js', '/src/content.js', '/src/session.js', '/vendor/three.module.min.js', '/starhermit.txt']) {
+    expect(html).toContain('starhermit');
+    for (const p of ['/native/main.ts', '/src/rules.js', '/src/content.js', '/src/session.js', '/starhermit.txt', '/starhermit-files.json']) {
       const r = await fetch(base() + p);
       expect(r.status, p).toBe(200);
     }

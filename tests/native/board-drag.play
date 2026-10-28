@@ -1,0 +1,53 @@
+# Journey stage 1 played on the 3D board with the mouse on a desktop: a click
+# selects a strand, a drag routes it through the cells (render.pick on the
+# board), a click behind the tip pulls back, a click on the spool reels.
+# Points are the board's cells at 1280x800 (measured from render.ts
+# cellScreen; re-measure when the HUD or the framing changes).
+# viewport 1280x800@1
+until 600 =Play
+frames 30
+click =Play
+until 300 Choose a mode
+frames 10
+click Journey.
+frames 10
+click Stage 1,
+until 300 Reeled 0/3
+frames 60
+# red: cells 1 → 5 → 9, then 9 → 10 → 11 (its spool), reel
+click 575 227
+frames 10
+drag 575 227 569 454 20
+frames 10
+expect Moves 2 (par 12)
+drag 569 454 853 454 20
+frames 10
+expect Moves 4 (par 12)
+click 853 454
+frames 20
+expect Reeled 1/3
+# blue: 15 → 12 in one drag, reel
+click 863 584
+frames 10
+drag 863 584 417 584 30
+frames 10
+click 417 584
+frames 20
+expect Reeled 2/3
+# green: 0, tap 4, tap 0 (behind the tip: pull back), drag 0 → 8, reel
+click 445 227
+frames 10
+click 437 335
+frames 10
+expect Moves 10 (par 12)
+click 445 227
+frames 10
+expect Moves 10 (par 12)
+drag 445 227 427 454 20
+frames 10
+click 427 454
+until 300 Total
+frames 10
+expect Board complete!
+expect 13 moves (par 12) · 0 hints
+expect =1775

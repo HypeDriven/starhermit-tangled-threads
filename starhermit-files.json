@@ -53,7 +53,7 @@
     "src/session.js": {"sha256": "0d02ecc5719c75ae66f8fa25d0b6ce2fd9636621ad47c3ae71ca9d32329898ce", "size": 6735},
     "src/sh-i18n.js": {"sha256": "12c7a743cf35b632b35604c293fa7447056fb42511e37c32b63a774db8e97783", "size": 4088},
     "src/strings.js": {"sha256": "0737672fedfccdfa100b203885c23ec7695d4ceb041662f1bb88cf8a9aba2bdc", "size": 55131},
-    "starhermit.txt": {"sha256": "a5ec7e6104790812b2e4b3c5a42888f71e59fc9b8f628b525a177942ac9349b3", "size": 2044}
+    "starhermit.txt": {"sha256": "5668b238008cdc3760215a4dd638cd2fa4e92d83e5a6a54828f4c913c7f7661c", "size": 2044}
   },
   "excluded": ["LICENSE.md", "coverart.png", "data/", "node_modules/", "package-lock.json", "package.json", "server.cjs", "sfx/manifest.json", "sfx/manifest.md", "spec.md", "tests/", "tools/", "tsconfig.json"],
   "format": 1

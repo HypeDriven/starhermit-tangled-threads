@@ -182,10 +182,10 @@ export function applyLook(next: Look): void {
     samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
-  // GradeShader after OutputPass (display space): a 0.18 S-curve (≈ contrast 0.09 as a slope), saturation 1.07,
+  // GradeShader after OutputPass (display space): a 0.18 smoothstep S-curve (contrastCurve "s"), saturation 1.07,
   // cool shadows / warm highlights by a smoothstep of luma from 0.25 to 0.85, a 0.26 vignette from 0.38 to 0.8 (y × 0.85).
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.09, saturation: 1.07, split: [0.25, 0.85], shadows: [0.97, 0.99, 1.03], highlights: [1.035, 1.0, 0.955],
+    space: "display", contrastCurve: "s", contrast: 0.18, saturation: 1.07, split: [0.25, 0.85], shadows: [0.97, 0.99, 1.03], highlights: [1.035, 1.0, 0.955],
     vignette: { amount: 0.26, inner: 0.38, outer: 0.8, scale: [1, 0.85] },
   } : null;
   renderer.antialias = next.antialias;

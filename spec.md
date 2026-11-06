@@ -1,6 +1,6 @@
 # Tangled Threads — specification
 
-Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.37.0`, `engine.minor=37`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
+Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.38.0`, `engine.minor=38`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
 
 ## Rules (src/rules.js — pure, deterministic)
 

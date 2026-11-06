@@ -1,0 +1,37 @@
+# Tier bench: Journey stage 1, routing the first strand and reeling it (sparks) on the same board.
+# viewport 1280x800@1
+until 600 =Play
+frames 30
+click =Play
+until 300 Choose a mode
+frames 10
+click Journey.
+frames 10
+click Stage 1,
+until 300 Reeled 0/
+frames 30
+frames 120
+measure start
+frames 100
+# strand 1: select
+key Enter 1
+frames 3
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 3
+key ArrowDown 1
+frames 2
+key Enter 1
+frames 3
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 3
+key ArrowRight 1
+frames 2
+key Enter 1
+frames 3
+key KeyR 1
+frames 240
+measure stop

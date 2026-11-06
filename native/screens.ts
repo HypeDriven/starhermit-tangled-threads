@@ -30,10 +30,8 @@ import * as audio from "./audio.ts";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; phone: boolean; land: boolean; wide: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale, lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   return { lw, lh, sc, phone: lw <= 480, land: lw > lh && lh <= 500, wide: lw >= 1024 };
 }
 const lastSize = new Map<string, ui.Rect>();
@@ -74,20 +72,9 @@ function button(b: Btn): void {
 }
 /** .btnrow: buttons at their own widths in centred rows that wrap at `width`. */
 function flow(label: string, list: Btn[], width: number, gap = 12, justify: "start" | "center" = "center"): ui.Rect {
-  const rows: Btn[][] = [[]];
-  let used = 0;
-  const bw = (b: Btn): number => Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? "btn"));
-  for (const b of list) {
-    const w = bw(b);
-    if (rows[rows.length - 1]!.length && used + gap + w > width) { rows.push([]); used = 0; }
-    used += (rows[rows.length - 1]!.length ? gap : 0) + w;
-    rows[rows.length - 1]!.push(b);
-  }
-  return ui.column(label, () => {
-    rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      for (const b of row) button({ ...b, width: bw(b) });
-    }, { spacing: gap, width, justify, align: "center" }));
-  }, { spacing: gap, width });
+  return ui.row(label, () => {
+    for (const b of list) button(b.width != null ? { ...b, width: Math.min(width, b.width) } : buttonWidth(b.text, b.style ?? "btn") > width ? { ...b, width } : b);
+  }, { wrap: true, width, gap, justify, align: "center" });
 }
 /** .mode-grid > .mode-card: auto-fit columns of at least `min` px, each row as tall as its tallest card. */
 interface Card { id: string; title: string; desc: string; name: string; act: () => void; selected?: boolean }
@@ -126,7 +113,6 @@ export function drawScreens(): void {
   const chrome = shell(L);
   render.setChrome(chrome);
   overlay(L);
-  toasts(L);
   if (app.focusNext) {
     const age = f.frame - app.openedFrame;
     if (age >= 1) ui.setFocus(app.focusNext);
@@ -287,18 +273,6 @@ function dashed(x: number, y: number, w: number, h: number, t: number, color: st
   const dash = 3 * t, step = dash * 2;
   for (let i = 0; i < w; i += step) { const d = Math.min(dash, w - i); draw.rect(x + i, y, d, t, color); draw.rect(x + i, y + h - t, d, t, color); }
   for (let i = 0; i < h; i += step) { const d = Math.min(dash, h - i); draw.rect(x, y + i, t, d, color); draw.rect(x + w - t, y + i, t, d, color); }
-}
-
-// ------------------------------------------------------------------ toasts (#sh-toast)
-function toasts(L: Layout): void {
-  if (!app.toasts.length) return;
-  const w = Math.min(L.lw * 0.92, 544);
-  const where = app.overlay ? { anchor: "top" as const, y: 8 } : { anchor: "bottom" as const, y: 16 };
-  ui.place("toast-stack", where, () => {
-    ui.column("toast-col", () => {
-      app.toasts.forEach((t, i) => ui.column(`toast-${i}`, () => para(t.text, w - 38, "toast-text", `toast-${i}-text`), { style: "toast" }));
-    }, { spacing: 6, align: "center" });
-  });
 }
 
 // ------------------------------------------------------------------ screens (.screen)

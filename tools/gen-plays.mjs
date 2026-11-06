@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { generateLevel } from '../src/content.js';
 import { createGame, applyAction, scoreState } from '../src/rules.js';
-import { STRINGS } from '../src/strings.js';
+import { readFileSync } from 'node:fs';
+const STRINGS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'native');
 const EN = STRINGS['en-US'];

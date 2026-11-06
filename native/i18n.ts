@@ -1,42 +1,22 @@
-// Localization: the browser build's tables (src/strings.js: keyed strings in
-// the nine StarHermit locales; the account strings in src/sh-i18n.js) in the
-// interface language the runtime reports (preferences().language: the
-// player's choice in Options › Language, else the account's preferred
-// language or the device's). The runtime's Options replace the game's own
-// Language setting (sh-language.js) and the DOM re-labelling (data-i18n):
-// every string is drawn through T() each frame, so a change shows on the
-// next frame and never restarts the round.
-import { onPreferencesChange, preferences } from "starhermit:engine";
+// Localization: the browser build's tables (keyed strings in the nine StarHermit
+// locales) in assets/strings.json, on the engine's strings: the interface language
+// the runtime reports (the player's choice in Options › Language, else the
+// account's preferred language or the device's), its locale chain, and the
+// account lines the engine keeps (`starhermit.*`). Every string is drawn through
+// T() each frame, so a change shows on the next frame and never restarts the round.
+import { strings } from "starhermit:engine";
 import * as ui from "starhermit:ui";
-import { STRINGS } from "../src/strings.js";
-import { shLocale, shText } from "../src/sh-i18n.js";
 
-type Table = Record<string, string>;
-const TABLES = STRINGS as unknown as Record<string, Table>;
-const EN = TABLES["en-US"]!;
-let locale = "";
-let dict: Table = EN;
+strings.load("assets/strings.json");
+strings.defaultLocale = "en-US";
+ui.setLanguage(strings.locale);
+strings.onChange((locale) => ui.setLanguage(locale));
 
-function apply(tag: string): void {
-  const next = shLocale(String(tag || "en-US")) as string;
-  const loc = TABLES[next] ? next : "en-US";
-  if (loc === locale) return;
-  locale = loc;
-  dict = TABLES[loc]!;
-  ui.setLanguage(locale);
-}
-apply(preferences().language);
-onPreferencesChange((p) => apply(p.language));
-
-export function currentLocale(): string { return locale; }
 export type Vars = Record<string, string | number>;
 /** i18n.js t(): the key's string with {name} placeholders from vars. */
-export function T(key: string, vars?: Vars | null): string {
-  const s = dict[key] ?? EN[key] ?? key;
-  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (vars[k] != null ? String(vars[k]) : m)) : s;
-}
-/** The account strings (signIn, invite, copied, copyFail, signedOut, lbPosting, lbRank, lbPosted, lbNotPosted). */
-export function S(key: string, vars?: Vars): string { return shText(key, vars ?? {}, locale) as string; }
+export function T(key: string, vars?: Vars | null): string { return strings.t(key, vars ?? undefined); }
+/** The engine's account strings (signIn, invite, inviteCopied, inviteLink, signedOut, leaderboardPosting, leaderboardRank, leaderboardPosted, leaderboardNotPosted). */
+export function S(key: string, vars?: Vars): string { return strings.t(`starhermit.${key}`, vars); }
 /** Rule-card markup ("<strong>Goal.</strong> Route…") as plain text: { head, body }. */
 export function rich(key: string, vars?: Vars): { head: string; body: string } {
   const s = T(key, vars).replace(/<kbd>(.*?)<\/kbd>/g, "$1");

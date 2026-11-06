@@ -105,11 +105,11 @@ At minor 23 the engine follows three r185:
 
 ACES tone mapping runs at exposure 1.05. The procedural textures are baked from render.js's own noise into assets/tex (`npm run textures`) at each texture budget.
 
-Quality follows the runtime's tier (`frame().quality`, native/quality.ts = src/gfx.js TABLE/BUDGETS):
+Quality follows the runtime's level: shadows, AO, bloom, grade and anti-aliasing are `levelSettings()`'s; the art columns follow the tier (`frame().quality`, native/quality.ts). At the tiers' anchor levels:
 
 | Tier | Shadows | AO | Bloom | Grade | Antialiasing | Reflections | Detail | Particles | Shading |
 |---|---|---|---|---|---|---|---|---|---|
-| Low | none | off | off | off | MSAA | off | plain | low | Lambert |
+| Low | none | off | off | off | off | off | plain | low | Lambert |
 | Balanced | 1024 | off | on | on | FXAA | on | detailed | low | Standard |
 | High | 2048 | on | on | on | SMAA | on | detailed | high | Physical |
 | Ultra | 4096 | high | on | on | MSAA | on | detailed | high | Physical |

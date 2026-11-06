@@ -12,7 +12,7 @@
 // window pauses the round and saves it, as visibilitychange did). Screens
 // are drawn by screens.ts (starhermit:ui), the board by render.ts
 // (starhermit:scene).
-import { clipboard, frame, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences } from "starhermit:engine";
+import { afterRender, clipboard, frame, levelSettings, onPreferencesChange, onRender, onResume, onStart, onSuspend, onUpdate, preferences } from "starhermit:engine";
 import { onAction, onPointerButton, onPointerMove, onTouch, primaryPointer, vibrate } from "starhermit:input";
 import * as ui from "starhermit:ui";
 import { onSessionEnded, requestSignIn } from "starhermit:platform";
@@ -67,13 +67,10 @@ function flushAnnouncements(): void {
   spokenAssertive = false;
 }
 export function toast(text: string, secs = 2.6): void {
-  app.toasts.push({ text, until: now() + secs });
-  if (app.toasts.length > 3) app.toasts.shift();
-  announce(text);
+  ui.toast!(text, { duration: secs, style: ["toast", "toast-text"], dismissible: false, position: app.overlay ? "top" : "bottom" });
 }
-const pending: (() => void)[] = [];
-/** A widget's press, run once the frame's UI is built (state changes mid-build would break later widgets). */
-export function later(fn: () => void): void { pending.push(fn); }
+/** A widget's press, run once the frame's UI is built (state changes mid-build would break later widgets), before the scene is drawn. */
+export function later(fn: () => void): void { afterRender(fn); }
 export const playing = (): boolean => !!app.session && app.session.phase === "active" && app.overlay === null;
 function haptic(ms: number): void { try { vibrate(ms); } catch { /* none */ } }
 
@@ -214,9 +211,9 @@ function finishRound(): void {
   // Ranked rounds: signed in, the total posts to the platform high-score board and the rank line shows;
   // signed out, the comparison line says the score stays local.
   if (s.ranked && platform.signedIn()) {
-    r.lb = { key: "lbPosting" };
+    r.lb = { key: "leaderboardPosting" };
     void platform.postScore(Math.max(0, Math.round(score.total))).then((p) => {
-      r.lb = !p.posted ? { key: "lbNotPosted" } : p.rank ? { key: "lbRank", vars: { rank: p.rank } } : { key: "lbPosted" };
+      r.lb = !p.posted ? { key: "leaderboardNotPosted" } : p.rank ? { key: "leaderboardRank", vars: { rank: p.rank } } : { key: "leaderboardPosted" };
     });
   } else if (s.ranked && term.reason === "complete") r.compare = true;
   audio.play(term.reason === "complete" ? "complete" : "fail");
@@ -493,17 +490,16 @@ export function signIn(): void { void requestSignIn().catch(() => undefined); }
 export function invite(): void {
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(S("copied")); } catch { toast(S("copyFail", { url: link }), 6); }
+  try { clipboard.writeText(link); toast(S("inviteCopied")); } catch { toast(S("inviteLink", { link }), 6); }
 }
 
 // ------------------------------------------------------------------ boot and lifecycle
 let lookKey = "";
 function applyLook(): void {
   const f = frame();
-  const k = `${f.quality}:${f.levelIndex}`;
-  if (k === lookKey) return;
-  lookKey = k;
-  render.applyLook(lookFor(f.quality, f.levelIndex));
+  if (f.level === lookKey) return;
+  lookKey = f.level;
+  render.applyLook(lookFor(levelSettings(f.level)));
 }
 /** main.js boot: restore an interrupted round from its snapshot, else the title. */
 function restoreOrTitle(): void {
@@ -528,6 +524,7 @@ function restoreOrTitle(): void {
 onStart(() => {
   initStyles();
   platform.initPlatform();
+  audio.loadSfx();
   audio.start();
   render.setReducedMotion(preferences().reducedMotion);
   render.setCvdPalette(platform.options.cvdPalette);
@@ -560,9 +557,10 @@ onUpdate((dt) => {
 onRender(() => {
   const wasPlaying = playing();
   drawScreens();
-  for (const fn of pending.splice(0)) fn();
-  pointerInput(wasPlaying);
-  const f = frame();
-  render.update(frameDt, f.width, f.height);
-  flushAnnouncements();
+  afterRender(() => { // after this frame's presses (added earlier), before the scene is synced and drawn
+    pointerInput(wasPlaying);
+    const f = frame();
+    render.update(frameDt, f.width, f.height);
+    flushAnnouncements();
+  });
 });

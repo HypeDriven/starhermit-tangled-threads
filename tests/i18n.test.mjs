@@ -1,12 +1,11 @@
 // i18n.test.mjs — every string key the engine client (native/*.ts) shows
 // exists in all nine locales, with the same {placeholders} as US English,
-// and the account strings (src/sh-i18n.js) cover every locale.
+// in assets/strings.json (account strings are the engine's starhermit.*).
 import { describe, it, expect } from './expect.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
-import { STRINGS } from '../src/strings.js';
-import { SH_STRINGS } from '../src/sh-i18n.js';
 
 const ROOT = new URL('..', import.meta.url);
+const STRINGS = JSON.parse(readFileSync(new URL('assets/strings.json', ROOT), 'utf8'));
 const LOCALES = ['en-US', 'en-GB', 'es-419', 'es-ES', 'de-DE', 'fr-FR', 'fr-CA', 'pt-BR', 'it-IT'];
 const code = readdirSync(new URL('native/', ROOT)).filter((f) => f.endsWith('.ts'))
   .map((f) => readFileSync(new URL('native/' + f, ROOT), 'utf8')).join('\n');
@@ -33,11 +32,6 @@ describe('localization', () => {
     for (const loc of LOCALES.filter((l) => !l.startsWith('en'))) {
       const same = [...used].filter((k) => STRINGS[loc][k] === STRINGS['en-US'][k] && !/^(Tutorial|Total|Home|Pause \(Esc\))$/.test(STRINGS[loc][k]));
       expect(same.length, `${loc}: ${same.join(', ')}`).toBeLessThan(4);
-    }
-  });
-  it('has the account strings in every locale', () => {
-    for (const loc of LOCALES) for (const k of ['signIn', 'invite', 'copied', 'copyFail', 'signedOut', 'lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) {
-      expect(typeof SH_STRINGS[loc][k], `${loc}.${k}`).toBe('string');
     }
   });
 });

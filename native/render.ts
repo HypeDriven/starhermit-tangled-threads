@@ -29,7 +29,7 @@
 // into the rectangle the HUD leaves free with a view offset (render.js
 // applyPlayFrame, unchanged), from the HUD pieces' window rectangles.
 import {
-  ACESFilmicToneMapping, AdditiveBlending, AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
+  ACESFilmicToneMapping, AdditiveBlending, ParticleEmitter, AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
   Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, LatheGeometry, Matrix4, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PMREMGenerator, PerspectiveCamera, Points,
   PointsMaterial, Quaternion, Raycaster, RepeatWrapping, RoomEnvironment, RoundedBoxGeometry, SRGBColorSpace, NoColorSpace,
@@ -38,7 +38,7 @@ import {
 } from "starhermit:scene";
 import { OffscreenCanvas } from "starhermit:canvas";
 import { Content, type LevelDef, type State, type Theme } from "./game.ts";
-import { MOTE_MAX, sparkCount, type Look } from "./quality.ts";
+import { MOTE_MAX, SPARK_MAX, sparkCount, type Look } from "./quality.ts";
 
 export interface Rect { x: number; y: number; width: number; height: number }
 const CELL = 1.0;
@@ -72,7 +72,7 @@ let boardCells: Mesh[] = [];
 let spoolMeshes: Group[] = [];
 let strandGroups: Group[] = [];
 let tubeCache: (Mesh | null)[] = [];
-let fxPool: Mesh[] = [];
+const sparks = new Map<number, ParticleEmitter>();
 let motes: Points | null = null;
 let moteSeed: number[] = [];
 let moteSpan = 1;
@@ -175,12 +175,13 @@ export function applyLook(next: Look): void {
   keyLight.castShadow = sz > 0;
   if (sz > 0) keyLight.shadow.mapSize = sz;
   // High threshold: only the selected tip, reel sparks and hot highlights bloom.
-  renderer.bloom = next.bloom ? { strength: 0.5, radius: 0.45, threshold: 0.88, resolution: next.budget.bloomRes } : null;
+  renderer.bloom = next.bloom !== null ? { strength: 0.5, radius: 0.45, threshold: 0.88, resolution: next.bloom } : null;
   // GTAOPass: radius 0.5, distance exponent 1.5, thickness 1, scale 1, 16 / 8 samples; the Poisson denoise per tier.
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: next.ao === "high" ? 0.85 : 0.7, radius: 0.5, distanceExponent: 1.5, thickness: 1.0, scale: 1.0,
-    samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  const ao = next.ao, fullAo = !!ao && ao.resolution >= 1; // the engine's AoQuality: resolution below 1 is "on", 1 is "high"
+  renderer.ao = !ao ? null : {
+    blendIntensity: fullAo ? 0.85 : 0.7, radius: 0.5, distanceExponent: 1.5, thickness: 1.0, scale: 1.0,
+    samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: fullAo ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // GradeShader after OutputPass (display space): a 0.18 smoothstep S-curve (contrastCurve "s"), saturation 1.07,
   // cool shadows / warm highlights by a smoothstep of luma from 0.25 to 0.85, a 0.26 vignette from 0.38 to 0.8 (y × 0.85).
@@ -327,6 +328,8 @@ function fitShadow(level: LevelDef): void {
 
 function disposeWorld(): void {
   if (!world) return;
+  for (const e of sparks.values()) { world.remove(e); e.dispose(); }
+  sparks.clear();
   world.traverse((o: Object3D) => {
     const m = o as Mesh;
     if (m.geometry) m.geometry.dispose();
@@ -335,7 +338,7 @@ function disposeWorld(): void {
   });
   scene.remove(world);
   world = null;
-  boardCells = []; spoolMeshes = []; strandGroups = []; fxPool = []; tubeCache = [];
+  boardCells = []; spoolMeshes = []; strandGroups = []; tubeCache = [];
   motes = null;
 }
 function rebuild(): void {
@@ -503,19 +506,23 @@ export function showGhost(worldPos: Vector3 | null, colorIdx: number, visible: b
 export function shake(amount: number): void { if (!reducedMotion) shakeAmp = Math.min(0.15, amount); }
 
 let sparkGeo: SphereGeometry | null = null;
-let fxRand = rng(4242);
+let fxRand = rng(4242); // the camera shake
 /** render.js burstAt: over-bright sparks (they alone catch the bloom) at the reel. */
 export function burstAt(worldPos: Vector3, colorIdx: number): void {
   if (!world || !look || reducedMotion || look.particles === "off") return;
-  const n = sparkCount(look);
-  sparkGeo ??= new SphereGeometry(0.05, 6, 6);
-  for (let i = 0; i < n; i++) {
-    const p = new Mesh(sparkGeo, new MeshBasicMaterial({ color: new Color(strandColor(colorIdx)).multiplyScalar(2.2), transparent: true }));
-    p.position.copy(worldPos);
-    p.userData = { vel: new Vector3((fxRand() - 0.5) * 2.4, fxRand() * 2.5 + 0.5, (fxRand() - 0.5) * 2.4), life: 1 };
-    world.add(p);
-    fxPool.push(p);
+  const hex = strandColor(colorIdx);
+  let e = sparks.get(hex);
+  if (!e) { // one emitter per colour, for the board's life
+    sparkGeo ??= new SphereGeometry(0.05, 6, 6);
+    e = new ParticleEmitter({
+      capacity: SPARK_MAX * 2, geometry: sparkGeo, material: new MeshBasicMaterial({ color: new Color(hex).multiplyScalar(2.2), transparent: true }),
+      seed: hex + 1, space: "local", life: 1 / 1.4, velocity: [0, 1.75, 0], velocitySpread: [1.2, 1.25, 1.2], gravity: [0, -4, 0], opacity: [1, 0],
+    });
+    e.frustumCulled = false;
+    world.add(e);
+    sparks.set(hex, e);
   }
+  e.burst(sparkCount(look), [worldPos.x, worldPos.y, worldPos.z]);
 }
 /** Clear the ghost and sparks when the board changes. */
 export function clearFx(): void { showGhost(null, 0, false); fxRand = rng(4242); }
@@ -683,17 +690,5 @@ export function update(dt: number, w: number, h: number): void {
     }
     p.needsUpdate = true;
   }
-  for (let i = fxPool.length - 1; i >= 0; i--) {
-    const p = fxPool[i]!;
-    const u = p.userData as { vel: Vector3; life: number };
-    u.life -= dt * 1.4;
-    if (u.life <= 0) {
-      world?.remove(p); (p.material as Material).dispose();
-      fxPool.splice(i, 1);
-      continue;
-    }
-    p.position.addScaledVector(u.vel, dt);
-    u.vel.y -= 4 * dt;
-    (p.material as MeshBasicMaterial).opacity = u.life;
-  }
+
 }

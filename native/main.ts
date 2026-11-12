@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Tangled Threads on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (src/rules.js), content
@@ -554,7 +555,7 @@ onUpdate((dt) => {
   const t = now();
   app.toasts = app.toasts.filter((x) => x.until >= t);
 });
-onRender(() => {
+onRender(__l10nRender(() => {
   const wasPlaying = playing();
   drawScreens();
   afterRender(() => { // after this frame's presses (added earlier), before the scene is synced and drawn
@@ -563,4 +564,8 @@ onRender(() => {
     render.update(frameDt, f.width, f.height);
     flushAnnouncements();
   });
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);

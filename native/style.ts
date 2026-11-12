@@ -1,3 +1,5 @@
+// localization-runtime:attached
+import { setLocalizedDefaultFont as __l10nSetFont, setLocalizedStyles as __l10nStyles } from "./l10n/font.ts";
 // The look of the HUD pills, the action tray, the board mirror, the hint bar
 // and the screens: the browser build's index.html <style>, rewritten
 // class-based in tools/ui-style.css and converted once with `starhermit css`
@@ -19,14 +21,14 @@ let current: Tokens = { ...BASE };
 let key = "";
 export function initStyles(): void {
   const css = files.readJson("assets/ui-style.json") as unknown as ui.CssStyles;
-  ui.setFont({ family: "system-ui" });
+  __l10nSetFont({ family: "system-ui" });
   ui.setTheme({
     fontSize: 16, smallSize: 13.6, headingSize: 26, padding: 8, spacing: 8, radius: 10,
     text: BASE.text!, muted: BASE.text!, panel: "#140e0a", control: BASE.pill!, hovered: "#4a3d34",
     pressed: "#56473c", field: BASE.pill!, accent: BASE.accent!, focus: BASE.focus!, outline: BASE["panel-border"]!,
   });
   ui.setTokens(css.tokens);
-  ui.setStyles({
+  __l10nStyles({
     ...css.styles,
     label: { text: { color: "$text" } },
     paragraph: { text: { color: "$text" } },

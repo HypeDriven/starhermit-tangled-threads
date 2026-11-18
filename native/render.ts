@@ -29,13 +29,9 @@
 // into the rectangle the HUD leaves free with a view offset (render.js
 // applyPlayFrame, unchanged), from the HUD pieces' window rectangles.
 import {
-  ACESFilmicToneMapping, AdditiveBlending, ParticleEmitter, AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3,
-  Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, LatheGeometry, Matrix4, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PMREMGenerator, PerspectiveCamera, Points,
-  PointsMaterial, Quaternion, Raycaster, RepeatWrapping, RoomEnvironment, RoundedBoxGeometry, SRGBColorSpace, NoColorSpace,
-  SphereGeometry, TextureLoader, TorusGeometry, TubeGeometry, Vector2, Vector3, pointerToNdc, renderer, scene,
-  type Material, type Object3D, type Texture,
+  ACESFilmicToneMapping, AdditiveBlending, AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, InstancedMesh, LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, PCFShadowMap, PMREMGenerator, PerspectiveCamera, Points, PointsMaterial, Quaternion, Raycaster, RepeatWrapping, RoomEnvironment, RoundedBoxGeometry, SRGBColorSpace, NoColorSpace, SphereGeometry, TextureLoader, TorusGeometry, TubeGeometry, Vector2, Vector3, pointerToNdc, renderer, scene, type Material, type Object3D, type Texture,
 } from "starhermit:scene";
+import { GPUParticleEmitter } from "starhermit:particles";
 import { OffscreenCanvas } from "starhermit:canvas";
 import { Content, type LevelDef, type State, type Theme } from "./game.ts";
 import { MOTE_MAX, SPARK_MAX, sparkCount, type Look } from "./quality.ts";
@@ -72,7 +68,7 @@ let boardCells: Mesh[] = [];
 let spoolMeshes: Group[] = [];
 let strandGroups: Group[] = [];
 let tubeCache: (Mesh | null)[] = [];
-const sparks = new Map<number, ParticleEmitter>();
+const sparks = new Map<number, GPUParticleEmitter>();
 let motes: Points | null = null;
 let moteSeed: number[] = [];
 let moteSpan = 1;
@@ -505,7 +501,6 @@ export function showGhost(worldPos: Vector3 | null, colorIdx: number, visible: b
 }
 export function shake(amount: number): void { if (!reducedMotion) shakeAmp = Math.min(0.15, amount); }
 
-let sparkGeo: SphereGeometry | null = null;
 let fxRand = rng(4242); // the camera shake
 /** render.js burstAt: over-bright sparks (they alone catch the bloom) at the reel. */
 export function burstAt(worldPos: Vector3, colorIdx: number): void {
@@ -513,9 +508,8 @@ export function burstAt(worldPos: Vector3, colorIdx: number): void {
   const hex = strandColor(colorIdx);
   let e = sparks.get(hex);
   if (!e) { // one emitter per colour, for the board's life
-    sparkGeo ??= new SphereGeometry(0.05, 6, 6);
-    e = new ParticleEmitter({
-      capacity: SPARK_MAX * 2, geometry: sparkGeo, material: new MeshBasicMaterial({ color: new Color(hex).multiplyScalar(2.2), transparent: true }),
+    e = new GPUParticleEmitter({
+      capacity: SPARK_MAX * 2, material: new PointsMaterial({ size: 0.1, color: new Color(hex).multiplyScalar(2.2), transparent: true }),
       seed: hex + 1, space: "local", life: 1 / 1.4, velocity: [0, 1.75, 0], velocitySpread: [1.2, 1.25, 1.2], gravity: [0, -4, 0], opacity: [1, 0],
     });
     e.frustumCulled = false;

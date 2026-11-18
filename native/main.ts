@@ -47,7 +47,6 @@ export const app = {
   settingsFromTitle: false,
   helpReturn: "title" as "title" | "pause",
   results: null as Results | null,
-  toasts: [] as { text: string; until: number }[],
 };
 export const fresh = (): boolean => frame().frame !== app.openedFrame;
 const now = (): number => frame().time;
@@ -552,8 +551,6 @@ onUpdate((dt) => {
   applyLook();
   applyTokens(ui.preferences().highContrast);
   audio.update(dt);
-  const t = now();
-  app.toasts = app.toasts.filter((x) => x.until >= t);
 });
 onRender(__l10nRender(() => {
   const wasPlaying = playing();

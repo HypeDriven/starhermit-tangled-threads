@@ -1,6 +1,6 @@
 # Tangled Threads — specification
 
-Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.39.0`, `engine.minor=39`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
+Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.44.1`, `engine.minor=44`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
 
 ## Rules (src/rules.js — pure, deterministic)
 
@@ -175,3 +175,13 @@ Sound:
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `sl-IT`, `da-DE`, `ru-FI`, `ru-EE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `su-ID`, `bew-ID`, `km-VN`.
 
 <!-- regional-localization:end -->
+
+Cosmetic particle emitters use native GPU particles with automatic CPU fallback on devices or graphics tiers without GPU particle support.
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+
+The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
+
+Toasts use native engine stacking, styling, accessibility and lifetime management.

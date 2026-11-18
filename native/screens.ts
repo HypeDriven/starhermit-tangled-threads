@@ -125,7 +125,7 @@ function gridCards(label: string, items: Card[], width: number, min: number, gap
 }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   const chrome = shell(L);
@@ -534,4 +534,11 @@ function helpScreen(w: number): void {
     }, { style: "rule-card", width: w, spacing: 4 }));
   }, { spacing: 8, width: w });
   ui.row("help-row", () => button({ id: "btn-help-close", text: T("close"), act: closeHelp }), { width: w, justify: "center" });
+}
+
+export function drawScreens(): void {
+  if (!(app.overlay === "help")) { drawScreensImmediate(); return; }
+  const actions = ["left","right","up","down","select","reel","undo","hint","pause","camera"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
 }

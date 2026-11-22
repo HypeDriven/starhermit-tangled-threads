@@ -1,6 +1,6 @@
 # Tangled Threads — specification
 
-Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.44.1`, `engine.minor=44`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
+Tangled Threads is a single-player routing puzzle on a cozy fiber-art worktable. You route coloured strands across a grid without crossings, then reel each one into the spool of its colour. It is a StarHermit engine **script game**: one package (`starhermit.txt`: `engine.version=1.47.0`, `engine.minor=47`, entry `native/main.ts`). The StarHermit client plays it natively, and browsers play it through the engine's web runtime (the loader `index.html` that `npm run package` writes).
 
 ## Rules (src/rules.js — pure, deterministic)
 
@@ -178,10 +178,14 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 Cosmetic particle emitters use native GPU particles with automatic CPU fallback on devices or graphics tiers without GPU particle support.
 
-## Engine 1.44.1
+## Engine 1.47.0
 
-Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the WebGPU-only StarHermit 1.47.0 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Toasts use native engine stacking, styling, accessibility and lifetime management.
+
+Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
+
+Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.

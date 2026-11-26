@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T09:42:15.178416+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T16:04:17.30267+00:00",
+    "coverArtUpdatedAt": "2026-11-26T22:48:24.740061+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T16:04:16.091746+00:00",
+      "deployedAt": "2026-11-26T22:48:24.725433+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.50.0",
+      "engineVersion": "1.51.0",
       "deployWarning": null
     },
     "description": "Route colored strands without crossings and reel each one into its matching spool.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T16:04:46.768Z",
-  "sourceCommit": "efca55deb8ece6c3e94e3e339ec57f4b5530b82e",
-  "bytesReceived": 2897665,
-  "archiveSha256": "eb91860bb4af36913a3aa2fa5e680e092aa7f117c6172d90777310678bc3d9d5",
+  "publishedAt": "2026-11-26T22:48:25.149Z",
+  "sourceCommit": "b3322211689e2967f3a55146c4c11ce0f7232251",
+  "bytesReceived": 2897638,
+  "archiveSha256": "f830cd7e0984c653a41ea88c91093f0bc9e38bfdf7f014394fae04edd8148a92",
   "indexSha256": "0ecf1e857a7c09bb10380e203aee9673622575a33ed71847708122afb2afbf78",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 2897665,
+    "bytesReceived": 2897638,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.50.0",
+    "engineVersion": "1.51.0",
     "deployWarning": null
   },
   "liveVerification": {
